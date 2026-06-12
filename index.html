@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balance Diario · Grupo Idirin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Cormorant+Garamond:wght@300;400;600&family=Inter:wght@300;400;500&display=swap');
 
@@ -642,9 +643,10 @@
 // ═══════════════════════════════════════════════════
 // CONFIGURACIÓN SUPABASE
 // ═══════════════════════════════════════════════════
-const SUPABASE_URL = 'https://TU_PROJECT_REF.supabase.co';
-const SUPABASE_ANON_KEY = 'TU_ANON_KEY';
-
+const SUPABASE_URL = 'https://rpsznhpmfehpcfqoduvf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJwc3puaHBtZmVocGNmcW9kdXZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyODY4MTgsImV4cCI6MjA5Njg2MjgxOH0.mj9BbFz9B7qUHh7bi3uos3ojcxnoeSaqlQFxQ7KIT-I';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
 // ── Empresas ──
 const EMPRESAS = {
   grupo_idirin:       { nombre: 'Grupo Idirin',       logo: 'Grupo · Idirin',     footer: 'GRUPO IDIRIN' },
