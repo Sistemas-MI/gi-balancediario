@@ -1934,16 +1934,11 @@
   <!-- TABS exclusivos de WAREHOUSE RENTALS: Balance Mensual / Cobrado por Vendedor -->
   <div class="dash-tabs" id="whTabsWrap" style="display:none">
     <button class="dash-tab active" type="button" id="tabWHBalance">Balance Mensual</button>
-    <button class="dash-tab" type="button" id="tabWHVendedores">Cobrado por Vendedor</button>
+    <button class="dash-tab" type="button" id="tabWHVendedores">Vendedores</button>
   </div>
 
   <div id="panelBalanceEmpresa">
-
-  <!-- Aviso: datos heredados del mes anterior, aún sin guardar en este mes -->
-  <div id="avisoMesNuevo" style="display:none;background:rgba(184,149,74,.13);border-left:3px solid var(--dorado);border-radius:3px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#7A6020;font-weight:400;line-height:1.5;">
-    📋 <strong>Nuevo mes.</strong> Todo continúa igual que el último día del mes anterior. Edita los campos que cambien y se guardará automáticamente en este mes.
-  </div>
-
+    
   <p class="sec-label bold">Avance hacia la meta mensual</p>
   <div class="termometro-card">
     <p class="meta-ref">Meta del mes: <strong contenteditable="true" data-field="meta" id="metaValor">$25,000,000</strong></p>
@@ -2147,7 +2142,7 @@
       <div class="wh-resumen-barra-bg">
         <div class="wh-resumen-barra-fill" id="whResumenBarraTotal" style="width:0%"></div>
       </div>
-      <p class="wh-resumen-nota">Mismo monto que "Cobrado" en Balance Mensual — los montos por vendedor abajo se registran por separado.</p>
+      <p class="wh-resumen-nota">Desglose de los montos por vendedor.</p>
     </div>
 
     <div class="wh-vendedores-grid" id="whVendedoresGrid">
@@ -2158,14 +2153,14 @@
 
     <!-- ── SECCIÓN 2: LO QUE FALTA POR CONSEGUIR, DIVIDIDO ENTRE LOS 4 ── -->
     <div class="sec-header-row">
-      <p class="sec-label bold" style="margin:0">Por conseguir · repartido entre vendedores</p>
+      <p class="sec-label bold" style="margin:0">Faltante por vendedores</p>
     </div>
     <div class="wh-resumen-card wh-resumen-card--falta">
       <div class="wh-resumen-top">
         <span class="wh-resumen-lbl">Falta para la meta</span>
         <span class="wh-resumen-val wh-resumen-val--falta" id="whPorConseguirTotal">$0</span>
       </div>
-      <p class="wh-resumen-nota">Mismo monto que "Por conseguir" en Balance Mensual, repartido en partes iguales entre los 4 vendedores.</p>
+      <p class="wh-resumen-nota">Repartido en partes iguales entre los vendedores.</p>
     </div>
 
     <div class="wh-vendedores-grid wh-vendedores-grid--falta" id="whPorConseguirGrid">
@@ -2186,7 +2181,7 @@
 <!-- FOOTER -->
 <div class="footer-idirin">
   <strong id="footerNombre">GRUPO IDIRIN</strong>
-  <span>Beyond the expected · Actualizado diariamente</span>
+  <span>Beyond the expected · Actualizado</span>
 </div>
 
 <!-- MODAL: Registrar / Editar evento UNVEIL -->
