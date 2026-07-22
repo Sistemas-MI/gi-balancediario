@@ -6151,13 +6151,6 @@ function recalcular() {
   else if (pct >= 50) { badge.className = 'estado-badge badge-medio'; badge.textContent = '⚡ En camino — hay que empujar'; }
   else                { badge.className = 'estado-badge badge-alerta'; badge.textContent = '▲ Urgente — hay que acelerar'; }
 
-  // "Por conseguir" acaba de recalcularse arriba (porConseguirMonto). El
-  // reparto entre los 4 vendedores tiene que reflejar ese cambio de
-  // inmediato, sin esperar a que el usuario entre al tab de Warehouse
-  // Rentals. renderWHPorConseguir() ya hace nada si el grid no existe
-  // en el DOM (otra empresa), así que es seguro llamarla siempre aquí.
-  renderWHPorConseguir();
-
   // El resumen "Total cobrado" + sus barras (dentro del tab "Vendedores")
   // también dependen de la misma suma que acabamos de usar para derivar
   // "Cobrado" arriba. actualizarBarrasWHVendedores() no hace nada si el
@@ -6191,6 +6184,16 @@ function recalcular() {
     else if (pctVenta >= 50) { badgeVenta.className = 'estado-badge badge-medio'; badgeVenta.textContent = '⚡ En camino — hay que empujar'; }
     else                     { badgeVenta.className = 'estado-badge badge-alerta'; badgeVenta.textContent = '▲ Urgente — hay que acelerar'; }
   }
+
+  // "Por conseguir" (Flujo) y "Diferencia" (Ventas) ya están recalculados
+  // arriba. El reparto entre los 4 vendedores tiene que reflejar ese
+  // cambio de inmediato, sin esperar a que el usuario entre al tab de
+  // Warehouse Rentals — y debe leer la meta del modo activo (Flujo o
+  // Ventas), por eso esta llamada va AL FINAL de recalcular(), después
+  // de que ambos bloques (Flujo y Ventas) ya se actualizaron en esta
+  // misma pasada. renderWHPorConseguir() ya hace nada si el grid no
+  // existe en el DOM (otra empresa), así que es seguro llamarla siempre.
+  renderWHPorConseguir();
 }
 
 
@@ -7946,16 +7949,20 @@ function renderWHPorConseguir() {
   // repartirles meta futura, así que se excluyen de este cálculo.
   const activos = WH_VENDEDORES.filter(v => !v.historico);
 
-  // "Por conseguir" (el total) sigue viviendo en la tarjeta del balance
-  // general, fuera de este tab. Lo seguimos leyendo de ahí, sin tocar
-  // nada, para que nunca se desincronice de "Balance Mensual".
-  const porConseguirEl = document.getElementById('porConseguirMonto');
-  const totalFalta = porConseguirEl ? parseMXN(porConseguirEl.textContent) : 0;
-  if (totalEl) totalEl.textContent = formatMXN(totalFalta);
-
-  // Cuota individual: la Meta total de la empresa entre los vendedores
-  // activos (misma Meta que ya se ve en "Balance Mensual").
-  const metaEl = document.getElementById('metaValor');
+  // CORRECCIÓN: el total de esta tarjeta ANTES se leía de "Por
+  // conseguir" / "Diferencia" (Meta − Cobrado − Por cobrar, a nivel
+  // empresa). El problema es que "Por cobrar" (facturas ya emitidas
+  // pero no cobradas) es un monto global que NO está desglosado por
+  // vendedor, así que las 4 tarjetas de abajo nunca lo restan — solo ven
+  // dinero YA cobrado por cada quien. Eso producía el caso confuso de
+  // "Falta para la meta: $0.00" arriba mientras abajo cada vendedor
+  // seguía mostrando un faltante grande: ambos números eran correctos
+  // según su propia fórmula, pero se contradecían visualmente.
+  //
+  // Ahora el total se calcula SUMANDO lo que realmente se muestra en
+  // las 4 tarjetas de abajo, para que la tarjeta de resumen nunca pueda
+  // decir "$0" mientras las filas siguen mostrando faltante.
+  const metaEl = document.getElementById(modoVentas ? 'ventaObjetivoValor' : 'metaValor');
   const metaTotal = metaEl ? parseMXN(metaEl.textContent) : 0;
   const metaIndividual = activos.length > 0 ? metaTotal / activos.length : 0;
 
@@ -7970,11 +7977,13 @@ function renderWHPorConseguir() {
   };
 
   grid.innerHTML = '';
+  let totalFalta = 0;
   activos.forEach(v => {
     const cobrado = cobradoDe(v.key);
     // Proporcional a lo cobrado: si ya alcanzó o superó su cuota, $0
     // de faltante — nunca negativo.
     const falta = Math.max(0, metaIndividual - cobrado);
+    totalFalta += falta;
     // La barra ahora muestra su AVANCE real hacia su propia cuota
     // (antes siempre se veía al 100%, porque las 4 partes eran
     // idénticas por definición; ya no lo son).
@@ -8003,6 +8012,12 @@ function renderWHPorConseguir() {
       }, 60);
     });
   });
+
+  // Se escribe hasta el final porque totalFalta se acumula fila por
+  // fila (ver arriba) — así la tarjeta de resumen SIEMPRE coincide con
+  // la suma real de lo que se ve en las 4 tarjetas de abajo, y nunca
+  // puede mostrar "$0" mientras las filas siguen mostrando faltante.
+  if (totalEl) totalEl.textContent = formatMXN(totalFalta);
 }
 
 // Actualiza solo las barras y el resumen total (sin re-renderizar las filas)
