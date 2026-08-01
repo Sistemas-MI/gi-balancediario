@@ -3100,9 +3100,10 @@
     font-size: 14px;
     font-weight: 500;
     color: var(--cafe);
+    white-space: nowrap;
   }
   .wh-acum-col.grp-mensual-meta { width: 100px; }
-  .wh-acum-col.grp-mensual-pct  { width: 60px; }
+  .wh-acum-col.grp-mensual-pct  { width: 88px; }
   .wh-acum-row.is-total .wh-acum-col.grp-mensual-meta,
   .wh-acum-row.is-total .wh-acum-col.grp-mensual-pct { color: var(--dorado); }
 
@@ -9271,10 +9272,10 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
 
     <p class="wh-acum-subtitulo">${lblCobrado} mensual</p>
     <div class="wh-acum-tabla">
-      <div class="wh-acum-tabla-head">
+      <div class="wh-acum-tabla-head" style="align-items:center">
         <div class="wh-acum-col wh-acum-nombre">Mes</div>
-        <div class="wh-acum-col" style="width:100px;flex-shrink:0;text-align:right">${lblMeta}</div>
-        <div class="wh-acum-col" style="width:60px;flex-shrink:0;text-align:right">% Margen</div>
+        <div class="wh-acum-col" style="width:100px;flex-shrink:0;text-align:right;white-space:nowrap">${lblMeta}</div>
+        <div class="wh-acum-col" style="width:88px;flex-shrink:0;text-align:right;white-space:nowrap">% Margen</div>
         <div class="wh-acum-col wh-acum-monto">Pesos</div>
       </div>
       ${filasMensualesHTML}
