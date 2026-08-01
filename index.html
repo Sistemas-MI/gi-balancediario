@@ -787,6 +787,24 @@
   body.modo-historico .credito-row-remove,
   body.modo-historico .plan-drag-handle { display: none !important; }
 
+  /* Excepción: Notas (notas_cobranza / venta_notas / gastos_notas) SÍ
+     sigue siendo editable en un mes pasado (modo-historico) — a
+     petición explícita, para poder corregir/quitar negritas puestas
+     por error. El selector de abajo exige contenteditable="true", así
+     que solo aplica cuando el JS decidió dejarlo editable (es decir,
+     nunca para roles de solo lectura: esos siguen con
+     contenteditable="false" y por lo tanto siguen bloqueados por la
+     regla general de arriba). Es más específico que esa regla general,
+     así que gana sin necesidad de tocarla. */
+  body.modo-historico [data-rich][contenteditable="true"] {
+    pointer-events: auto !important;
+    cursor: text !important;
+  }
+  body.modo-historico [data-rich][contenteditable="true"]:focus {
+    background: rgba(92,46,26,.05) !important;
+    border-radius: 3px;
+  }
+
   /* ── Modo LECTOR: deshabilitar edición ── */
   body.modo-lector [contenteditable] {
     pointer-events: none !important;
@@ -4965,8 +4983,16 @@ function actualizarEditabilidadGlobal() {
   const esVistaAcotada = document.body.classList.contains('modo-vista-acotada'); // especial/wh/is/mi/bc
   const debeBloquear = esMesPasado || esLector || esUser || esEditor || esVistaAcotada;
 
+  // Notas (data-rich): excepción explícita — siguen bloqueadas para
+  // roles de solo lectura (eso es un tema de permisos, no de "mes
+  // cerrado"), pero NO se bloquean solo por ser un mes pasado, para
+  // poder corregir/quitar negritas puestas por error. El resto de los
+  // campos del balance usa "debeBloquear" exactamente igual que antes.
+  const debeBloquearNotas = esLector || esUser || esEditor || esVistaAcotada;
+
   document.querySelectorAll('[data-field][contenteditable]').forEach(el => {
-    el.setAttribute('contenteditable', debeBloquear ? 'false' : 'true');
+    const bloquear = el.hasAttribute('data-rich') ? debeBloquearNotas : debeBloquear;
+    el.setAttribute('contenteditable', bloquear ? 'false' : 'true');
   });
 
   // BALANCE DE VENTAS: "Vendedores" (NMH Baja Sur / warehouse_rentals)
@@ -6944,10 +6970,18 @@ function onEdit(campo) {
   // activar la clase "modo-historico", así ambas verificaciones siempre
   // coinciden. Si es mes pasado, no se recalcula ni se guarda nada — se
   // corta aquí, antes de tocar el DOM o la base de datos.
+  //
+  // Excepción explícita: Notas (notas_cobranza / venta_notas /
+  // gastos_notas) sí se puede seguir editando y guardando en meses
+  // pasados — por ejemplo, para corregir o quitar negritas puestas por
+  // error. El resto de los campos del balance sigue exactamente igual
+  // de bloqueado que antes.
   const anioHoy = HOY.getFullYear();
   const mesHoy  = HOY.getMonth() + 1;
   const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-  if (esMesPasado) return;
+  const elCampo    = document.querySelector(`[data-field="${campo}"]`);
+  const esNotaRica = !!(elCampo && elCampo.hasAttribute('data-rich'));
+  if (esMesPasado && !esNotaRica) return;
 
   // Defensa estructural para roles de solo lectura: aunque el CSS ya les
   // quita pointer-events y contenteditable="false" les impide escribir,
