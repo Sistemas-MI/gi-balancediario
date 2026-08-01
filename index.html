@@ -1813,6 +1813,42 @@
     font-family: 'Inter', sans-serif;
     font-size: 12px;
   }
+  /* Texto marcado en negritas dentro de Notas (b/strong los inserta
+     document.execCommand('bold') al usar la mini-barra o Ctrl/Cmd+B) */
+  .notas-texto b, .notas-texto strong { font-weight: 700; }
+
+  /* ── MINI-BARRA DE NEGRITAS (aparece al seleccionar texto en Notas) ──
+     Un solo botón "N" flotante, mismo lenguaje visual que el resto de
+     la app (café/dorado). Se posiciona con JS justo arriba de la
+     selección y solo vive mientras haya texto seleccionado dentro de
+     un campo [data-rich]. */
+  .negrita-toolbar {
+    position: fixed;
+    z-index: 9999;
+    display: none;
+    background: var(--cafe);
+    border-radius: 5px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.28);
+    padding: 3px;
+    line-height: 0;
+  }
+  .negrita-toolbar.visible { display: block; }
+  .negrita-toolbar button {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border-radius: 3px;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--crema);
+    cursor: pointer;
+  }
+  .negrita-toolbar button:hover,
+  .negrita-toolbar button.activo { background: rgba(245,240,232,.2); }
 
   /* ── INGRESOS IMPREVISTOS (solo UNVEIL) ──
      Mismo lenguaje visual que .notas-card (tarjeta con borde de acento
@@ -3554,6 +3590,12 @@
 
 <div class="save-status" id="saveStatus">Guardado</div>
 
+<!-- Mini-barra flotante de negritas: aparece al seleccionar texto
+     dentro de cualquier campo de Notas (ver JS: negritaToolbar). -->
+<div class="negrita-toolbar" id="negritaToolbar">
+  <button type="button" id="btnNegrita" title="Negritas (Ctrl/Cmd+B)">N</button>
+</div>
+
 <!-- HEADER -->
 <!-- ════ LOGIN OVERLAY ════ -->
 <div id="loginScreen">
@@ -3851,7 +3893,7 @@
   <!-- NOTAS DE COBRANZA -->
   <div class="notas-card" id="notasCard">
     <p class="t-label bold-nota">📝 Notas</p>
-    <div class="notas-texto" contenteditable="true" data-field="notas_cobranza"
+    <div class="notas-texto" contenteditable="true" data-field="notas_cobranza" data-rich="true"
          data-placeholder="Datos adicionales"></div>
   </div>
 
@@ -4019,7 +4061,7 @@
   <!-- NOTAS — independientes de Balance de Flujo -->
   <div class="notas-card" id="notasCardVenta">
     <p class="t-label bold-nota">📝 Notas</p>
-    <div class="notas-texto" contenteditable="true" data-field="venta_notas"
+    <div class="notas-texto" contenteditable="true" data-field="venta_notas" data-rich="true"
          data-placeholder="Datos adicionales"></div>
   </div>
 
@@ -4369,7 +4411,7 @@
     <div class="gastos-nota-card">
       <p class="t-label">📋Notas</p>
       <div class="notas-texto" contenteditable="true"
-           data-field="gastos_notas"
+           data-field="gastos_notas" data-rich="true"
            data-placeholder="Notas sobre el presupuesto mensual, compromisos futuros, etc."></div>
     </div>
 
@@ -4575,6 +4617,50 @@ function escapeHTML(str) {
   const d = document.createElement('div');
   d.textContent = str || '';
   return d.innerHTML;
+}
+
+// ── Sanitizar HTML de campos "ricos" (Notas) ──
+// Los campos [data-rich] permiten un único formato: negritas. Esta
+// función se usa TANTO al guardar (lo que escribe el usuario en el
+// contenteditable) COMO al pintar (lo que viene de Supabase), así que
+// es la única puerta de entrada de HTML en estos campos: cualquier
+// etiqueta que no sea <b>/<strong>/<br> se elimina conservando su
+// texto, y a las etiquetas permitidas se les quitan todos sus
+// atributos (nada de estilos, clases, on-handlers, etc.).
+const RICH_TAGS_PERMITIDOS = new Set(['B', 'STRONG', 'BR']);
+// Etiquetas de bloque que algunos navegadores insertan solos al
+// presionar Enter dentro de un contenteditable (en vez de <br>). Se
+// descartan igual que cualquier otra etiqueta no permitida, pero como
+// representan un salto de línea, se reemplazan por un <br> en vez de
+// simplemente desaparecer (si no, dos líneas quedarían pegadas).
+const RICH_TAGS_BLOQUE = new Set(['DIV','P','LI','UL','OL','TR','TABLE','TBODY','THEAD','H1','H2','H3','H4','H5','H6','SECTION','ARTICLE']);
+function sanitizeRichText(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  (function limpiar(nodo) {
+    Array.from(nodo.childNodes).forEach(hijo => {
+      if (hijo.nodeType === 1) { // elemento
+        if (RICH_TAGS_PERMITIDOS.has(hijo.tagName)) {
+          Array.from(hijo.attributes).forEach(attr => hijo.removeAttribute(attr.name));
+          limpiar(hijo);
+          return;
+        }
+        // Etiqueta no permitida: se descarta pero se conserva su
+        // contenido (texto e hijos). Si era de bloque, se antepone un
+        // <br> para no perder el salto de línea que representaba
+        // (salvo que sea el primer nodo del contenedor).
+        if (RICH_TAGS_BLOQUE.has(hijo.tagName) && hijo.previousSibling) {
+          nodo.insertBefore(document.createElement('br'), hijo);
+        }
+        while (hijo.firstChild) nodo.insertBefore(hijo.firstChild, hijo);
+        nodo.removeChild(hijo);
+      } else if (hijo.nodeType !== 3) { // no es texto → fuera (comentarios, etc.)
+        nodo.removeChild(hijo);
+      }
+    });
+  })(tmp);
+  return tmp.innerHTML;
 }
 
 // ── Toast de estado ──
@@ -5024,6 +5110,67 @@ function donutChart(cobradoPct, porCobrarPct, faltaPct, pctReal) {
 // ═══════════════════════════════════════════════════
 // LISTENERS EDITABLES
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// MINI-BARRA DE NEGRITAS (selección de texto en Notas)
+// ═══════════════════════════════════════════════════
+// Aparece flotando arriba de cualquier selección de texto hecha
+// dentro de un campo [data-rich] (los tres "Notas": cobranza, venta y
+// gastos). Un solo botón para marcar/quitar negritas — mismo efecto
+// que Ctrl/Cmd+B. No depende de estar "activada": simplemente
+// aparece cuando hay texto seleccionado y desaparece cuando no.
+function initNegritaToolbar() {
+  const toolbar = document.getElementById('negritaToolbar');
+  const btn     = document.getElementById('btnNegrita');
+  if (!toolbar || !btn) return;
+
+  function campoRicoActivo(selection) {
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+    let nodo = selection.anchorNode;
+    if (!nodo) return null;
+    if (nodo.nodeType === 3) nodo = nodo.parentElement;
+    return nodo ? nodo.closest('[data-rich]') : null;
+  }
+
+  function ocultar() {
+    toolbar.classList.remove('visible');
+  }
+
+  function posicionar(range) {
+    const rect = range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) { ocultar(); return; }
+    toolbar.classList.add('visible');
+    // Se mide después de mostrarla para conocer su ancho real.
+    const anchoBarra = toolbar.offsetWidth || 34;
+    let left = rect.left + rect.width / 2 - anchoBarra / 2;
+    left = Math.max(6, Math.min(left, window.innerWidth - anchoBarra - 6));
+    let top = rect.top - toolbar.offsetHeight - 8;
+    if (top < 6) top = rect.bottom + 8; // si no cabe arriba, se pone abajo
+    toolbar.style.left = `${left}px`;
+    toolbar.style.top  = `${top}px`;
+  }
+
+  document.addEventListener('selectionchange', () => {
+    const selection = window.getSelection();
+    const campo = campoRicoActivo(selection);
+    if (!campo) { ocultar(); return; }
+    posicionar(selection.getRangeAt(0));
+  });
+
+  // Al hacer scroll dentro de un campo largo de Notas, o de la página,
+  // se oculta en vez de reposicionar (evita que quede flotando en un
+  // lugar equivocado).
+  window.addEventListener('scroll', ocultar, true);
+
+  // mousedown (no click) + preventDefault: evita que el botón le robe
+  // el foco al campo de Notas, lo que colapsaría la selección antes
+  // de poder aplicar la negrita.
+  btn.addEventListener('mousedown', e => {
+    e.preventDefault();
+    document.execCommand('bold');
+    ocultar();
+  });
+}
+
 function attachEditableListeners(root) {
   root.querySelectorAll('[data-field][contenteditable]').forEach(el => {
     const campo = el.getAttribute('data-field');
@@ -5060,6 +5207,24 @@ function attachEditableListeners(root) {
         const raw = el.textContent.trim();
         if (raw === '') return;
         el.textContent = formatMXN(parseMXN(raw));
+      });
+    }
+
+    // Campos ricos (Notas): permiten negritas. Ctrl/Cmd+B alterna
+    // negritas en el texto seleccionado (mismo atajo que Word/Docs),
+    // y Enter inserta un <br> explícito en vez de dejar que el
+    // navegador cree un <div>/<p> nuevo (que sanitizeRichText tendría
+    // que desarmar de todos modos, y así el HTML queda más simple).
+    if (el.hasAttribute('data-rich')) {
+      el.addEventListener('keydown', e => {
+        const teclaMod = e.ctrlKey || e.metaKey;
+        if (teclaMod && e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          document.execCommand('bold');
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          document.execCommand('insertHTML', false, '<br>');
+        }
       });
     }
   });
@@ -6215,7 +6380,11 @@ function aplicarDatos(datos) {
     // llegó desde Supabase ya formateado o como número plano (por
     // ejemplo, datos cargados por SQL directo). No depende de que el
     // usuario haya vuelto a tocar el campo para que se vea correcto.
-    el.textContent = el.hasAttribute('data-money') ? formatMXN(parseMXN(val)) : val;
+    if (el.hasAttribute('data-rich')) {
+      el.innerHTML = sanitizeRichText(val);
+    } else {
+      el.textContent = el.hasAttribute('data-money') ? formatMXN(parseMXN(val)) : val;
+    }
   });
 
   const mesSelect = document.getElementById('mesSelect');
@@ -6473,7 +6642,7 @@ async function cargarVistaGeneral() {
             <div class="legend-item"><span class="legend-dot dot-falta"></span><span class="legend-txt">Falta vender</span><span class="legend-pct">${faltaPct}%</span></div>
           </div>
         </div>
-        ${(!modoVentas && !esVistaAcotada && datos.notas_cobranza) ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(184,149,74,.12);border-left:3px solid var(--dorado);border-radius:3px;font-family:'EB Garamond',serif;font-size:12px;color:#2C1A10;font-weight:400;line-height:1.5;">${escapeHTML(datos.notas_cobranza)}</div>` : ''}
+        ${(!modoVentas && !esVistaAcotada && datos.notas_cobranza) ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(184,149,74,.12);border-left:3px solid var(--dorado);border-radius:3px;font-family:'EB Garamond',serif;font-size:12px;color:#2C1A10;font-weight:400;line-height:1.5;white-space:pre-wrap;">${sanitizeRichText(datos.notas_cobranza)}</div>` : ''}
         ${(!modoVentas && !esVistaAcotada && !esLector && id === 'unveil' && imprevistosUnveil.length) ? `
         <div class="dash-imprevistos">
           <div class="dash-imprevistos-header">
@@ -6778,7 +6947,18 @@ function onEdit(campo) {
   clearTimeout(saveTimers[campo]);
   saveTimers[campo] = setTimeout(async () => {
     const el = document.querySelector(`[data-field="${campo}"]`);
-    if (el) await guardarCampo(empresaActual, campo, el.textContent.trim());
+    if (!el) return;
+    if (el.hasAttribute('data-rich')) {
+      const limpio = sanitizeRichText(el.innerHTML).trim();
+      // Re-pintar con la versión ya sanitizada, así lo que se guarda y
+      // lo que se ve en pantalla siempre coinciden (por ejemplo, si el
+      // usuario pegó HTML con estilos, aquí se le quitan antes de
+      // seguir editando).
+      if (el.innerHTML !== limpio) el.innerHTML = limpio;
+      await guardarCampo(empresaActual, campo, limpio);
+    } else {
+      await guardarCampo(empresaActual, campo, el.textContent.trim());
+    }
   }, 800);
 }
 
@@ -6786,6 +6966,8 @@ function onEdit(campo) {
 // INIT
 // ═══════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
+
+  initNegritaToolbar();
 
   // ── UI del login ──
   const loginScreen = document.getElementById('loginScreen');
