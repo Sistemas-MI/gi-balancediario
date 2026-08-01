@@ -9199,8 +9199,8 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
     <div class="wh-acum-row">
       <div class="wh-acum-col wh-acum-nombre">${escapeHTML(f.nombre)}</div>
       <div class="wh-acum-col grp-mensual-meta">${formatMXN(f.meta)}</div>
-      <div class="wh-acum-col grp-mensual-pct">${grpPctMargen(f.cobrado, f.meta)}</div>
       <div class="wh-acum-col wh-acum-monto">${formatMXN(f.cobrado)}</div>
+      <div class="wh-acum-col grp-mensual-pct">${grpPctMargen(f.cobrado, f.meta)}</div>
     </div>
   `).join('');
 
@@ -9275,15 +9275,15 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
       <div class="wh-acum-tabla-head" style="align-items:center">
         <div class="wh-acum-col wh-acum-nombre">Mes</div>
         <div class="wh-acum-col" style="width:100px;flex-shrink:0;text-align:right;white-space:nowrap">${lblMeta}</div>
+        <div class="wh-acum-col wh-acum-monto">Cobrado</div>
         <div class="wh-acum-col" style="width:88px;flex-shrink:0;text-align:right;white-space:nowrap">% Margen</div>
-        <div class="wh-acum-col wh-acum-monto">Pesos</div>
       </div>
       ${filasMensualesHTML}
       <div class="wh-acum-row is-total">
         <div class="wh-acum-col wh-acum-nombre">Total:</div>
         <div class="wh-acum-col grp-mensual-meta">${formatMXN(totalMetaPeriodo)}</div>
-        <div class="wh-acum-col grp-mensual-pct">${pctLogrado}%</div>
         <div class="wh-acum-col wh-acum-monto">${formatMXN(totalCobradoPeriodo)}</div>
+        <div class="wh-acum-col grp-mensual-pct">${pctLogrado}%</div>
       </div>
     </div>
 
