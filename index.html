@@ -3084,6 +3084,28 @@
   }
   .wh-acum-row.is-total .wh-acum-col.wh-acum-monto { color: var(--dorado); }
 
+  /* Columnas extra de la tabla "Cobrado mensual" del Acumulado de
+     Grupo Idirin: además de Mes/Pesos que ya existían, se agrega
+     Meta/Objetivo y % Margen por mes. Reutilizan la tipografía de
+     .wh-acum-monto pero con anchos más angostos (son 2 columnas
+     numéricas más, además de la de Pesos) para que las 4 quepan bien
+     en la misma fila. No toca .wh-acum-monto ni ninguna otra tabla
+     que ya use esa clase (Cobrado por vendedor, Meta·Cobrado·Por
+     cobrar, etc.) — son clases nuevas y propias de esta tabla. */
+  .wh-acum-col.grp-mensual-meta,
+  .wh-acum-col.grp-mensual-pct {
+    flex-shrink: 0;
+    text-align: right;
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--cafe);
+  }
+  .wh-acum-col.grp-mensual-meta { width: 100px; }
+  .wh-acum-col.grp-mensual-pct  { width: 60px; }
+  .wh-acum-row.is-total .wh-acum-col.grp-mensual-meta,
+  .wh-acum-row.is-total .wh-acum-col.grp-mensual-pct { color: var(--dorado); }
+
   /* Tarjeta de total general del periodo, mismo componente visual que
      .hist-totales (caja café sólida con columnas). */
   .wh-acum-resumen-titulo {
@@ -9153,7 +9175,7 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
     totalCobradoPeriodo   += cobradoMes;
     totalMetaPeriodo      += metaMes;
     totalPorCobrarPeriodo += porCobrarMes;
-    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado: cobradoMes };
+    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado: cobradoMes, meta: metaMes };
   });
 
   const hayDatos = totalCobradoPeriodo > 0 || totalMetaPeriodo > 0 || totalPorCobrarPeriodo > 0;
@@ -9164,9 +9186,19 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
 
   const tituloPeriodo = grpAcumTituloActual();
 
+  // % margen = % de la meta/objetivo del mes que ya se cobró. Igual
+  // fórmula que "% logrado" del total del periodo, aplicada mes a mes;
+  // si ese mes no tiene meta capturada, se muestra "—" en vez de un
+  // engañoso "0%".
+  function grpPctMargen(cobrado, meta) {
+    return meta > 0 ? `${Math.round(cobrado / meta * 100)}%` : '—';
+  }
+
   const filasMensualesHTML = filasMensuales.map(f => `
     <div class="wh-acum-row">
       <div class="wh-acum-col wh-acum-nombre">${escapeHTML(f.nombre)}</div>
+      <div class="wh-acum-col grp-mensual-meta">${formatMXN(f.meta)}</div>
+      <div class="wh-acum-col grp-mensual-pct">${grpPctMargen(f.cobrado, f.meta)}</div>
       <div class="wh-acum-col wh-acum-monto">${formatMXN(f.cobrado)}</div>
     </div>
   `).join('');
@@ -9241,11 +9273,15 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
     <div class="wh-acum-tabla">
       <div class="wh-acum-tabla-head">
         <div class="wh-acum-col wh-acum-nombre">Mes</div>
+        <div class="wh-acum-col" style="width:100px;flex-shrink:0;text-align:right">${lblMeta}</div>
+        <div class="wh-acum-col" style="width:60px;flex-shrink:0;text-align:right">% Margen</div>
         <div class="wh-acum-col wh-acum-monto">Pesos</div>
       </div>
       ${filasMensualesHTML}
       <div class="wh-acum-row is-total">
         <div class="wh-acum-col wh-acum-nombre">Total:</div>
+        <div class="wh-acum-col grp-mensual-meta">${formatMXN(totalMetaPeriodo)}</div>
+        <div class="wh-acum-col grp-mensual-pct">${pctLogrado}%</div>
         <div class="wh-acum-col wh-acum-monto">${formatMXN(totalCobradoPeriodo)}</div>
       </div>
     </div>
