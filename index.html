@@ -4602,6 +4602,7 @@ const DEFAULTS = {
   wh_vend_juan:         '',
   wh_vend_nicole:       '',
   wh_vend_sin_vendedor: '',
+  wh_vend_evento_atp:   '',
 };
 
 // ── Estado global ──
@@ -7897,6 +7898,10 @@ const WH_VENDEDORES = [
   { key: 'nicole',       nombre: 'Nicole',       iniciales: 'N', color: 'color-6', historico: true },
   // Ventas sin vendedor asignado (Feb y May 2026), también solo lectura
   { key: 'sin_vendedor', nombre: 'Eventos', iniciales: '—', color: 'color-sv', historico: true },
+  // Ingreso puntual de julio 2026 (evento ATP, cobrado directo, sin
+  // vendedor asignado) — mismo patrón que 'sin_vendedor': histórico,
+  // solo lectura, y solo aparece en el mes donde tiene monto real.
+  { key: 'evento_atp',  nombre: 'Evento ATP', iniciales: 'ATP', color: 'color-sv', historico: true },
 ];
 
 // Suma de "Cobrado por vendedor" (Regina G + Regina M + Jaqueline V +
