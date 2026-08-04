@@ -827,7 +827,9 @@
   /* El rol lector no debe ver, en Balance Mensual, "Ingresos
      imprevistos" ni "Traspasos entre compañías" */
   body.modo-lector #imprevistosCard,
-  body.modo-lector #traspasosCard { display: none !important; }
+  body.modo-lector #traspasosCard,
+  body.modo-lector #desgloseCardFlujo,
+  body.modo-lector #desgloseCardVenta { display: none !important; }
 
   /* ══════════════════════════════════════════
      ROL EDITOR (modo-editor)
@@ -900,7 +902,9 @@
   /* Mismo criterio que modo-lector: no ve "Ingresos imprevistos" ni
      "Traspasos entre compañías" */
   body.modo-user #imprevistosCard,
-  body.modo-user #traspasosCard { display: none !important; }
+  body.modo-user #traspasosCard,
+  body.modo-user #desgloseCardFlujo,
+  body.modo-user #desgloseCardVenta { display: none !important; }
 
   /* El rol user no debe ver "Situación de crédito" en ninguna empresa */
   body.modo-user #creditoSeccionHeader,
@@ -980,6 +984,8 @@
   body.modo-vista-acotada #notasCard,
   body.modo-vista-acotada #imprevistosCard,
   body.modo-vista-acotada #traspasosCard,
+  body.modo-vista-acotada #desgloseCardFlujo,
+  body.modo-vista-acotada #desgloseCardVenta,
   body.modo-vista-acotada #ornamentoTrasPlan,
   body.modo-vista-acotada #planAtaqueHeader,
   body.modo-vista-acotada #planLista,
@@ -2193,6 +2199,203 @@
   body.modo-lector    .traspaso-remove,
   body.modo-user      .traspasos-card .btn-add-circular,
   body.modo-user      .traspaso-remove { display: none !important; }
+
+  /* ── DESGLOSE DE POR COBRAR (todas las empresas, Balance de Flujo Y
+     Balance de Ventas — se muestra en las dos vistas porque son el
+     mismo dato) ── Mismo patrón visual y estructural que "Ingresos
+     imprevistos"/"Traspasos entre compañías": tarjeta con borde de
+     acento, total siempre visible, lista colapsable. Acento propio
+     (vino/burdeos apagado) para distinguirse de Notas (dorado),
+     Imprevistos (terracota) y Traspasos (azul-pizarra). Es puramente
+     informativo — no se conecta a "Cobrado"/"Por cobrar" ni a ningún
+     cálculo; solo agrega, sobre cada fila, un botón de
+     Pagado/Pendiente que no existe en las otras dos tarjetas. */
+  .desglose-card {
+    background: rgba(122,74,92,.07);
+    border: 1px solid rgba(122,74,92,.25);
+    border-left: 3px solid #7A4A5C;
+    border-radius: 4px;
+    padding: 12px 16px 14px;
+    margin-bottom: 16px;
+  }
+  .desglose-card .sec-header-row { margin-bottom: 8px; }
+  .desglose-card .t-label {
+    font-size: 9px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: #7A4A5C;
+    font-weight: 600;
+    margin: 0;
+  }
+  .desglose-card .btn-add-circular {
+    border-color: rgba(122,74,92,.5);
+    background: rgba(122,74,92,.1);
+    color: #7A4A5C;
+  }
+  .desglose-card .btn-add-circular:hover {
+    background: #7A4A5C;
+    color: #fff;
+    border-color: #7A4A5C;
+  }
+  .desglose-header-izq {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .desglose-toggle {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(122,74,92,.4);
+    background: rgba(122,74,92,.08);
+    color: #7A4A5C;
+    font-size: 9px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background .2s, color .2s, border-color .2s, transform .25s;
+  }
+  .desglose-toggle:hover {
+    background: #7A4A5C;
+    color: #fff;
+    border-color: #7A4A5C;
+  }
+  .desglose-toggle.expandido { transform: rotate(180deg); }
+  .desglose-total-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .desglose-total-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--cafe-light);
+  }
+  .desglose-total-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 19px;
+    font-weight: 600;
+    color: #7A4A5C;
+    white-space: nowrap;
+  }
+  .desglose-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .3s ease;
+  }
+  .desglose-body.expandido {
+    max-height: 1200px;
+  }
+  .desglose-body-inner { padding-top: 4px; }
+  .desglose-vacio {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-style: italic;
+    font-weight: 300;
+    color: var(--suave);
+    padding: 2px 0 0;
+  }
+  .desglose-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 11px 0;
+    border-bottom: 1px solid rgba(122,74,92,.15);
+    position: relative;
+    transition: background .2s;
+  }
+  .desglose-row:last-child { border-bottom: none; }
+  /* Cuando está marcado como Pagado, un lavado verde muy sutil sobre
+     toda la fila — además del propio botón — para que se note "de
+     reojo" sin tener que leer el texto del botón. */
+  .desglose-row.is-pagado { background: rgba(46,125,83,.06); border-radius: 4px; }
+  .desglose-row .desglose-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 17px;
+    font-weight: 500;
+    color: #7A4A5C;
+    white-space: nowrap;
+    min-width: 90px;
+  }
+  .desglose-row .desglose-desc {
+    flex: 1;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--texto);
+    line-height: 1.5;
+    padding-right: 22px;
+  }
+  .desglose-row .desglose-desc:empty::before {
+    content: attr(data-placeholder);
+    color: var(--suave);
+    font-style: italic;
+    font-weight: 300;
+  }
+  /* ── Botón Pagado/Pendiente — junto a la descripción, como se pidió ── */
+  .desglose-pagado-btn {
+    flex-shrink: 0;
+    align-self: center;
+    border: 1px solid rgba(122,74,92,.35);
+    background: transparent;
+    color: var(--suave);
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .2s, color .2s, border-color .2s;
+  }
+  .desglose-pagado-btn:hover { border-color: #2E7D53; color: #2E7D53; }
+  .desglose-pagado-btn.is-pagado {
+    background: #2E7D53;
+    border-color: #2E7D53;
+    color: #fff;
+  }
+  .desglose-remove {
+    position: absolute;
+    top: 11px;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(122,74,92,.3);
+    background: rgba(122,74,92,.08);
+    color: #7A4A5C;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s, color .2s, border-color .2s;
+  }
+  .desglose-remove:hover {
+    background: #7A4A5C;
+    color: #fff;
+    border-color: #7A4A5C;
+  }
+  body.modo-historico .desglose-card .btn-add-circular,
+  body.modo-historico .desglose-remove,
+  body.modo-lector    .desglose-card .btn-add-circular,
+  body.modo-lector    .desglose-remove,
+  body.modo-user      .desglose-card .btn-add-circular,
+  body.modo-user      .desglose-remove { display: none !important; }
+  /* El botón Pagado/Pendiente, a diferencia del "×" de quitar, SÍ se
+     queda visible en modo-historico/lector/user (es información útil,
+     no solo una acción) — nada más se desactiva el clic. */
+  body.modo-historico .desglose-pagado-btn,
+  body.modo-lector    .desglose-pagado-btn,
+  body.modo-user      .desglose-pagado-btn { pointer-events: none !important; cursor: default !important; }
 
   /* ── Versión de solo lectura: dentro de la tarjeta de CADA empresa en
      el dashboard de Grupo Idirin. Mismo lenguaje visual y mismo acento
@@ -3938,6 +4141,32 @@
          data-placeholder="Datos adicionales"></div>
   </div>
 
+  <!-- DESGLOSE — todas las empresas, en Balance de Flujo Y en Balance
+       de Ventas (misma tarjeta, mismos datos, ver bloqueVentas más
+       abajo). Es un desglose manual e informativo de "Por cobrar": no
+       suma ni resta nada de "Cobrado"/"Por cobrar"/el % de la meta —
+       solo para llevar la cuenta de qué ingresos específicos componen
+       ese total y cuáles ya se pagaron. -->
+  <div class="desglose-card" id="desgloseCardFlujo">
+    <div class="sec-header-row">
+      <div class="desglose-header-izq">
+        <button class="desglose-toggle" id="btnToggleDesgloseFlujo" type="button" title="Mostrar/ocultar detalle">▾</button>
+        <p class="t-label">🧾 Desglose</p>
+      </div>
+      <button class="btn-add-circular" id="btnAgregarDesgloseFlujo" type="button" title="Agregar ingreso al desglose">+</button>
+    </div>
+    <div class="desglose-total-row">
+      <span class="desglose-total-label">Total del desglose:</span>
+      <span class="desglose-total-monto" id="desgloseTotalMontoFlujo">$0</span>
+    </div>
+    <div class="desglose-body" id="desgloseBodyFlujo">
+      <div class="desglose-body-inner">
+        <div id="desgloseContFlujo"></div>
+        <p class="desglose-vacio" id="desgloseVacioFlujo">Sin ingresos en el desglose este mes</p>
+      </div>
+    </div>
+  </div>
+
   <!-- INGRESOS IMPREVISTOS — solo visible en UNVEIL (ver actualizarEmpresaUI).
        No suman al "Cobrado" ni al % de la meta: son informativos, para
        llevar registro de ventas que no estaban contempladas.
@@ -4104,6 +4333,30 @@
     <p class="t-label bold-nota">📝 Notas</p>
     <div class="notas-texto" contenteditable="true" data-field="venta_notas" data-rich="true"
          data-placeholder="Datos adicionales"></div>
+  </div>
+
+  <!-- DESGLOSE — misma tarjeta y mismos datos que en Balance de Flujo
+       (ver desgloseCardFlujo arriba); se muestra también aquí porque
+       es información que también quiere verse/editarse desde Balance
+       de Ventas. -->
+  <div class="desglose-card" id="desgloseCardVenta">
+    <div class="sec-header-row">
+      <div class="desglose-header-izq">
+        <button class="desglose-toggle" id="btnToggleDesgloseVenta" type="button" title="Mostrar/ocultar detalle">▾</button>
+        <p class="t-label">🧾 Desglose</p>
+      </div>
+      <button class="btn-add-circular" id="btnAgregarDesgloseVenta" type="button" title="Agregar ingreso al desglose">+</button>
+    </div>
+    <div class="desglose-total-row">
+      <span class="desglose-total-label">Total del desglose:</span>
+      <span class="desglose-total-monto" id="desgloseTotalMontoVenta">$0</span>
+    </div>
+    <div class="desglose-body" id="desgloseBodyVenta">
+      <div class="desglose-body-inner">
+        <div id="desgloseContVenta"></div>
+        <p class="desglose-vacio" id="desgloseVacioVenta">Sin ingresos en el desglose este mes</p>
+      </div>
+    </div>
   </div>
 
   <div class="ornamento">— · —</div>
@@ -4615,6 +4868,7 @@ let creditoTarjetas = []; // [{ id, bloqueIds: [...], expandida }, ...]
 // mostrando solo los primeros 2; con 2 bloques o menos no aplica.
 let imprevistoIds  = [];
 let traspasoIds    = [];
+let desgloseIds    = [];
 let saldoIds       = []; // ids de las filas de la tabla "Saldos" (cuentas bancarias)
 let gastoPagadoIds   = [];
 let gastoPorPagarIds = [];
@@ -6153,6 +6407,228 @@ async function quitarTraspasoRow(id) {
 }
 
 // ═══════════════════════════════════════════════════
+// DESGLOSE (las 5 empresas, Balance de Flujo Y Balance de Ventas)
+// ═══════════════════════════════════════════════════
+// Mismo patrón exacto que Ingresos Imprevistos / Traspasos: una lista
+// de ids (desglose_ids), y por cada id se guardan tres campos en
+// Supabase: desglose_{id}_monto, desglose_{id}_desc y
+// desglose_{id}_pagado ('true'/'false'). Es deliberadamente
+// informativo — NO se suma a "cobrado" ni a "por_cobrar", no entra en
+// recalcular(), no mueve el % de avance hacia la meta/objetivo: es un
+// desglose manual de "Por cobrar" que el usuario arma a mano.
+//
+// A diferencia de Imprevistos/Traspasos, esta tarjeta vive DOS veces
+// en el DOM — una copia en bloqueFlujo (id...Flujo) y otra en
+// bloqueVentas (id...Venta) — porque el usuario pidió verla en ambos
+// balances. Las funciones de abajo operan sobre las dos copias a la
+// vez (mismo id, mismos datos), así que da igual desde cuál vista se
+// edite: ambas quedan sincronizadas de inmediato sin recargar.
+const DESGLOSE_SUFIJOS = ['Flujo', 'Venta'];
+
+function crearDesgloseRow(id, monto, desc, pagado) {
+  const estaPagado = pagado === 'true';
+  const div = document.createElement('div');
+  div.className = 'desglose-row' + (estaPagado ? ' is-pagado' : '');
+  div.dataset.desgloseId = id;
+  div.innerHTML = `
+    <div class="desglose-monto" contenteditable="true" data-field="desglose_${id}_monto">${escapeHTML(formatMXN(parseMXN(monto)))}</div>
+    <button type="button" class="desglose-pagado-btn${estaPagado ? ' is-pagado' : ''}" title="Marcar como pagado / pendiente">${estaPagado ? '✓ Pagado' : 'Pendiente'}</button>
+    <div class="desglose-desc" contenteditable="true" data-field="desglose_${id}_desc"
+         data-placeholder="¿De qué es este cobro?">${escapeHTML(desc || '')}</div>
+    <span class="desglose-remove" title="Quitar">×</span>
+  `;
+
+  const montoEl   = div.querySelector('.desglose-monto');
+  const descEl    = div.querySelector('.desglose-desc');
+  const pagadoBtn = div.querySelector('.desglose-pagado-btn');
+
+  [montoEl, descEl].forEach(el => {
+    el.addEventListener('paste', e => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, txt);
+    });
+  });
+
+  montoEl.addEventListener('input', () => {
+    // BLOQUEO ESTRUCTURAL para meses pasados — mismo criterio que
+    // Imprevistos/Traspasos.
+    const anioHoy = HOY.getFullYear();
+    const mesHoy  = HOY.getMonth() + 1;
+    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+    if (esMesPasado) return;
+
+    sincronizarDesgloseCampo(id, 'monto', montoEl.textContent, montoEl);
+    actualizarTotalesDesglose();
+    clearTimeout(saveTimers['desglose_' + id + '_monto']);
+    saveTimers['desglose_' + id + '_monto'] = setTimeout(async () => {
+      await guardarCampo(empresaActual, `desglose_${id}_monto`, montoEl.textContent.trim());
+    }, 800);
+  });
+  montoEl.addEventListener('blur', () => {
+    const num = parseMXN(montoEl.textContent);
+    montoEl.textContent = formatMXN(num);
+    sincronizarDesgloseCampo(id, 'monto', montoEl.textContent, montoEl);
+    actualizarTotalesDesglose();
+  });
+
+  descEl.addEventListener('input', () => {
+    const anioHoy = HOY.getFullYear();
+    const mesHoy  = HOY.getMonth() + 1;
+    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+    if (esMesPasado) return;
+
+    sincronizarDesgloseCampo(id, 'desc', descEl.textContent, descEl);
+    clearTimeout(saveTimers['desglose_' + id + '_desc']);
+    saveTimers['desglose_' + id + '_desc'] = setTimeout(async () => {
+      await guardarCampo(empresaActual, `desglose_${id}_desc`, descEl.textContent.trim());
+    }, 800);
+  });
+
+  pagadoBtn.addEventListener('click', async () => {
+    // Mismo bloqueo estructural — además, el CSS ya desactiva el clic
+    // en modo-historico/lector/user (ver pointer-events en el CSS);
+    // esto es la capa de seguridad de datos, igual que el resto de la
+    // tarjeta.
+    const anioHoy = HOY.getFullYear();
+    const mesHoy  = HOY.getMonth() + 1;
+    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+    if (esMesPasado) return;
+
+    const nuevoEstado = !div.classList.contains('is-pagado');
+    // Refleja el nuevo estado en TODAS las copias de esta fila (Flujo
+    // y Ventas), no solo en la que se clickeó.
+    document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"]`).forEach(fila => {
+      fila.classList.toggle('is-pagado', nuevoEstado);
+      const btn = fila.querySelector('.desglose-pagado-btn');
+      if (btn) {
+        btn.classList.toggle('is-pagado', nuevoEstado);
+        btn.textContent = nuevoEstado ? '✓ Pagado' : 'Pendiente';
+      }
+    });
+    await guardarCampo(empresaActual, `desglose_${id}_pagado`, nuevoEstado ? 'true' : 'false');
+  });
+
+  div.querySelector('.desglose-remove').addEventListener('click', () => quitarDesgloseRow(id));
+  return div;
+}
+
+// Refleja, en la OTRA copia de esta misma fila (Flujo↔Ventas), el
+// texto que se acaba de teclear — así no se ven desincronizadas si el
+// usuario cambia de vista sin recargar la página.
+function sincronizarDesgloseCampo(id, campo, valorTexto, elFuente) {
+  document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"] .desglose-${campo}`).forEach(el => {
+    if (el !== elFuente) el.textContent = valorTexto;
+  });
+}
+
+function renderDesglose(datos) {
+  DESGLOSE_SUFIJOS.forEach(suf => {
+    const cont  = document.getElementById('desgloseCont' + suf);
+    const vacio = document.getElementById('desgloseVacio' + suf);
+    if (!cont) return;
+    cont.innerHTML = '';
+    desgloseIds.forEach(id => {
+      const monto  = (datos && datos[`desglose_${id}_monto`])  || '$0';
+      const desc   = (datos && datos[`desglose_${id}_desc`])   || '';
+      const pagado = (datos && datos[`desglose_${id}_pagado`]) || 'false';
+      cont.appendChild(crearDesgloseRow(id, monto, desc, pagado));
+    });
+    if (vacio) vacio.style.display = desgloseIds.length ? 'none' : '';
+  });
+  actualizarTotalesDesglose();
+}
+
+// Suma los montos visibles en el DOM de cada copia (Flujo/Ventas) y
+// pinta su propio total — mismo criterio "se lee del DOM, no de
+// Supabase" que actualizarTotalImprevistos()/actualizarTotalTraspasos().
+function actualizarTotalesDesglose() {
+  DESGLOSE_SUFIJOS.forEach(suf => {
+    const cont    = document.getElementById('desgloseCont' + suf);
+    const totalEl = document.getElementById('desgloseTotalMonto' + suf);
+    if (!cont || !totalEl) return;
+    let total = 0;
+    cont.querySelectorAll('.desglose-monto').forEach(el => { total += parseMXN(el.textContent); });
+    totalEl.textContent = formatMXN(total);
+  });
+}
+
+// Expande/colapsa solo la copia de la tarjeta donde se clickeó el
+// toggle (Flujo y Ventas se expanden/colapsan de forma independiente,
+// ya que solo una de las dos está visible a la vez).
+function toggleDesglose(sufijo) {
+  const body = document.getElementById('desgloseBody' + sufijo);
+  const btn  = document.getElementById('btnToggleDesglose' + sufijo);
+  if (!body || !btn) return;
+  const expandir = !body.classList.contains('expandido');
+  body.classList.toggle('expandido', expandir);
+  btn.classList.toggle('expandido', expandir);
+}
+
+async function agregarDesgloseRow() {
+  // BLOQUEO ESTRUCTURAL para meses pasados — mismo criterio que
+  // agregarImprevistoRow()/agregarTraspasoRow().
+  const anioHoy = HOY.getFullYear();
+  const mesHoy  = HOY.getMonth() + 1;
+  const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+  if (esMesPasado) return;
+
+  const id = 'dg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  desgloseIds.push(id);
+
+  DESGLOSE_SUFIJOS.forEach(suf => {
+    const cont  = document.getElementById('desgloseCont' + suf);
+    const vacio = document.getElementById('desgloseVacio' + suf);
+    if (!cont) return;
+    cont.appendChild(crearDesgloseRow(id, '$0', '', 'false'));
+    if (vacio) vacio.style.display = 'none';
+    const body = document.getElementById('desgloseBody' + suf);
+    const btnToggle = document.getElementById('btnToggleDesglose' + suf);
+    if (body && !body.classList.contains('expandido')) {
+      body.classList.add('expandido');
+      if (btnToggle) btnToggle.classList.add('expandido');
+    }
+  });
+
+  // Foco solo en la copia que está realmente visible en este momento
+  // (Flujo o Ventas, según el switch de balance activo).
+  const bloqueVentasEl = document.getElementById('bloqueVentas');
+  const sufActivo = (bloqueVentasEl && bloqueVentasEl.style.display !== 'none') ? 'Venta' : 'Flujo';
+  const contActivo = document.getElementById('desgloseCont' + sufActivo);
+  if (contActivo) {
+    const filaNueva = contActivo.querySelector('.desglose-row:last-child .desglose-desc');
+    if (filaNueva) filaNueva.focus();
+  }
+
+  actualizarTotalesDesglose();
+  await guardarCampo(empresaActual, 'desglose_ids', JSON.stringify(desgloseIds));
+}
+
+async function quitarDesgloseRow(id) {
+  // Mismo bloqueo estructural que agregarDesgloseRow().
+  const anioHoy = HOY.getFullYear();
+  const mesHoy  = HOY.getMonth() + 1;
+  const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+  if (esMesPasado) return;
+
+  document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"]`).forEach(el => el.remove());
+  desgloseIds = desgloseIds.filter(x => x !== id);
+  await guardarCampo(empresaActual, 'desglose_ids', JSON.stringify(desgloseIds));
+  DESGLOSE_SUFIJOS.forEach(suf => {
+    const vacio = document.getElementById('desgloseVacio' + suf);
+    if (vacio) vacio.style.display = desgloseIds.length ? 'none' : '';
+  });
+  actualizarTotalesDesglose();
+  try {
+    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_monto')}`);
+    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_desc')}`);
+    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_pagado')}`);
+  } catch(e) { console.error('quitarDesgloseRow cleanup:', e); }
+}
+
+
+
+// ═══════════════════════════════════════════════════
 // SALDOS BANCARIOS (las 5 empresas)
 // ═══════════════════════════════════════════════════
 // Tabla repetible: cada fila es una cuenta bancaria con 6 campos
@@ -6468,6 +6944,10 @@ function aplicarDatos(datos) {
   try { const rawT = datosSinFlag['traspaso_ids']; if (rawT) traspasoIds = JSON.parse(rawT); } catch(e) { traspasoIds = []; }
   renderTraspasos(datosSinFlag);
 
+  desgloseIds = [];
+  try { const rawD = datosSinFlag['desglose_ids']; if (rawD) desgloseIds = JSON.parse(rawD); } catch(e) { desgloseIds = []; }
+  renderDesglose(datosSinFlag);
+
   saldoIds = [];
   try { const rawS = datosSinFlag['saldos_ids']; if (rawS) saldoIds = JSON.parse(rawS); } catch(e) { saldoIds = []; }
   renderSaldos(datosSinFlag);
@@ -6544,6 +7024,16 @@ function actualizarEmpresaUI(empresa_id) {
   const btnToggleTr    = document.getElementById('btnToggleTraspasos');
   if (traspasosBody) traspasosBody.classList.remove('expandido');
   if (btnToggleTr)    btnToggleTr.classList.remove('expandido');
+
+  // Desglose: igual que Traspasos, aplica a las 5 empresas por igual —
+  // solo colapsar el detalle de las DOS copias (Flujo y Ventas) cada
+  // vez que se entra/cambia de empresa o periodo.
+  DESGLOSE_SUFIJOS.forEach(suf => {
+    const body = document.getElementById('desgloseBody' + suf);
+    const btn  = document.getElementById('btnToggleDesglose' + suf);
+    if (body) body.classList.remove('expandido');
+    if (btn)  btn.classList.remove('expandido');
+  });
 }
 
 // ── Vista general ──
@@ -7182,6 +7672,10 @@ async function initApp() {
   document.getElementById('btnToggleImprevistos').addEventListener('click', toggleImprevistos);
   document.getElementById('btnAgregarTraspaso').addEventListener('click', agregarTraspasoRow);
   document.getElementById('btnToggleTraspasos').addEventListener('click', toggleTraspasos);
+  document.getElementById('btnAgregarDesgloseFlujo').addEventListener('click', agregarDesgloseRow);
+  document.getElementById('btnToggleDesgloseFlujo').addEventListener('click', () => toggleDesglose('Flujo'));
+  document.getElementById('btnAgregarDesgloseVenta').addEventListener('click', agregarDesgloseRow);
+  document.getElementById('btnToggleDesgloseVenta').addEventListener('click', () => toggleDesglose('Venta'));
   document.getElementById('btnAgregarSaldo').addEventListener('click', agregarSaldoFila);
 
   // BALANCE DE VENTAS
