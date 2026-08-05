@@ -5366,9 +5366,29 @@ async function cargarEmpresa(empresa_id) {
   return {};
 }
 
+function esValorVacio(valor) {
+  const v = (valor == null ? '' : valor).toString().trim();
+  return v === '' || v === '$0' || v === '$0.00' || v === '0' || v === '0.00';
+}
+
 // ── Guardar un campo individual (incluye periodo) ──
 async function guardarCampo(empresa_id, campo, valor) {
   try {
+    if (esValorVacio(valor)) {
+      // Nada real que guardar: si ya existía una fila (por ejemplo, se
+      // borró un valor que antes sí tenía algo), se elimina en vez de
+      // dejar "$0"/"" en la base de datos — así solo quedan filas con
+      // datos reales. Alcance exacto: esta empresa, este periodo, este
+      // campo — nunca toca otros meses ni otros campos. Sin excepciones:
+      // incluye también "Meta del mes" y los 3 pasos fijos de "Cómo lo
+      // vamos a resolver", así que si se dejan vacíos a propósito, al
+      // recargar ese mes va a reaparecer el texto de ejemplo original
+      // (no hay fila que le diga al sistema "esto se vació a propósito").
+      await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${periodoAnio}&mes=eq.${periodoMes}&campo=eq.${encodeURIComponent(campo)}`);
+      showStatus('✓ Guardado');
+      registrarEdicion(empresa_id, campo, valor);
+      return;
+    }
     await sbRequest('POST', '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo', [
       { empresa_id, anio: periodoAnio, mes: periodoMes, campo, valor, actualizado_en: new Date().toISOString() }
     ]);
