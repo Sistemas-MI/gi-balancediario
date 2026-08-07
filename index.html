@@ -197,8 +197,10 @@
   body.modo-ventas #tabUnveilEventos,
   body.modo-ventas #tabUnveilGastos,
   body.modo-ventas #tabUnveilSaldos,
+  body.modo-ventas #tabUnveilCreditos,
   body.modo-ventas #tabWHGastos,
   body.modo-ventas #tabWHSaldos,
+  body.modo-ventas #tabWHCreditos,
   body.modo-ventas #tabGenericoGastos,
   body.modo-ventas #tabGenericoSaldos { display: none !important; }
 
@@ -371,6 +373,264 @@
     cursor: default;
     user-select: none;
   }
+
+  /* ── CRÉDITOS BANCARIOS (Unveil / NMH Baja Sur) ──
+     Dos partes: A) Líneas de crédito (se crean una vez, informativas,
+     sin efecto en ningún cálculo) y B) Registro mensual (una tarjeta
+     por mes, con una columna de saldo por cada línea activa, más
+     Efectivo disponible/Pago capital editables y Total/Deuda neta
+     calculados). Mismo patrón de interacción que Imprevistos/
+     Traspasos/Desglose ("+" agrega, "×" quita). Grupo Idirin ya no
+     tiene su propia versión — solo un espejo de texto, sin editar. */
+  .creditos-aviso-diseno {
+    background: rgba(184,149,74,.1);
+    border: 1px dashed rgba(184,149,74,.4);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px;
+    font-style: italic;
+    color: var(--cafe-light);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .creditos-parte-nota {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-style: italic;
+    color: var(--suave);
+    margin: 2px 0 10px;
+  }
+  .creditos-vacio {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-style: italic;
+    font-weight: 300;
+    color: var(--suave);
+    text-align: center;
+    padding: 18px 0;
+  }
+  #lineasCreditoCont:not(:empty) ~ #lineasCreditoVacio,
+  #registrosMensualesCont:not(:empty) ~ #registrosMensualesVacio { display: none; }
+
+  .credito-registro-card {
+    position: relative;
+    background: rgba(92,46,26,.04);
+    border: 1px solid rgba(92,46,26,.16);
+    border-left: 3px solid var(--cafe);
+    border-radius: 4px;
+    padding: 14px 30px 16px 16px;
+    margin-bottom: 12px;
+  }
+  .credito-registro-etiqueta {
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px;
+    font-style: italic;
+    font-weight: 500;
+    color: var(--cafe-light);
+    margin: 0 0 10px;
+    outline: none;
+  }
+  .credito-registro-etiqueta:empty::before {
+    content: attr(data-placeholder);
+    color: var(--suave);
+    font-weight: 300;
+  }
+  /* Encabezado de una línea de crédito: nombre (grande, serif) + chip
+     de monto (mismo lenguaje que .deuda-chip de Situación de crédito,
+     pero en tono café claro en vez de dorado sobre fondo oscuro). */
+  .linea-credito-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding-right: 4px;
+  }
+  .linea-credito-titulo {
+    font-family: 'EB Garamond', serif;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--cafe);
+    outline: none;
+    flex: 1;
+    min-width: 0;
+  }
+  .linea-credito-titulo:empty::before {
+    content: attr(data-placeholder);
+    color: var(--suave);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 13px;
+  }
+  .linea-credito-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #7A6020;
+    background: rgba(184,149,74,.14);
+    padding: 3px 10px;
+    border-radius: 20px;
+    outline: none;
+    white-space: nowrap;
+  }
+  .linea-credito-monto:empty::before {
+    content: attr(data-placeholder);
+    color: var(--suave);
+    font-weight: 400;
+  }
+  .creditos-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px 14px;
+  }
+  @media (max-width: 420px) { .creditos-mini-grid { grid-template-columns: repeat(2, 1fr); } }
+  .creditos-campo-label {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 8px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--suave);
+    margin-bottom: 3px;
+  }
+  .creditos-campo-valor {
+    display: block;
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--cafe);
+    outline: none;
+  }
+  .creditos-campo-valor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--suave);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 12px;
+  }
+  .creditos-campo-valor[data-auto] {
+    cursor: default;
+    user-select: none;
+  }
+  .creditos-campo.campo-total .creditos-campo-valor { color: #7A6020; font-weight: 600; }
+  .creditos-campo.campo-deuda .creditos-campo-valor { color: #C0392B; font-weight: 600; }
+  /* "Terminación" ocupa toda la fila, aparte del mini-grid de 3 columnas */
+  .creditos-campo-full {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(92,46,26,.12);
+  }
+
+  .credito-row-remove.creditos-registro-remove {
+    position: absolute;
+    top: 12px;
+    right: 10px;
+    border-color: rgba(92,46,26,.25);
+    background: rgba(92,46,26,.08);
+    color: var(--cafe);
+  }
+  .credito-row-remove.creditos-registro-remove:hover {
+    background: var(--cafe);
+    color: var(--crema);
+  }
+
+  /* ── Grupo Idirin: espejo de solo lectura ── */
+  .creditos-espejo-empresa {
+    border: 1px solid var(--linea);
+    border-radius: 4px;
+    padding: 12px 14px 14px;
+    margin-bottom: 14px;
+    background: #fff;
+  }
+  .creditos-espejo-titulo {
+    font-family: 'EB Garamond', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--cafe);
+    margin: 0 0 8px;
+  }
+  .creditos-espejo-subtitulo {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--suave);
+    margin: 10px 0 4px;
+  }
+  .creditos-espejo-subtitulo:first-of-type { margin-top: 0; }
+  .creditos-espejo-linea {
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    color: var(--texto);
+    margin: 2px 0;
+    line-height: 1.5;
+  }
+  .creditos-espejo-empresa .creditos-vacio { padding: 4px 0; text-align: left; }
+
+  /* ── Información fija de cada línea (Grupo Idirin): mismo tono
+     ámbar/amarillo claro que el Excel de referencia usa para marcar
+     los datos que NO cambian mes a mes (fechas, plazo, cláusula...). ── */
+  .creditos-info-fija-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 4px;
+  }
+  .creditos-info-fija-card {
+    flex: 1 1 220px;
+    background: #FBF1D3;
+    border: 1px solid rgba(184,149,74,.4);
+    border-radius: 4px;
+    padding: 10px 12px 11px;
+  }
+  .creditos-info-fija-titulo {
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--cafe);
+    margin: 0 0 1px;
+  }
+  .creditos-info-fija-empresa {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--suave);
+  }
+  .creditos-info-fija-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: #7A6020;
+    margin: 2px 0 7px;
+  }
+  .creditos-info-fija-filas {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .creditos-info-fija-filas span {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: var(--cafe-light);
+    line-height: 1.5;
+  }
+
+  /* ── Delta vs. mes anterior, junto al badge de Deuda neta ── */
+  .creditos-campo-delta {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+  .creditos-campo-delta.baja  { color: #2E7D32; }
+  .creditos-campo-delta.sube  { color: #C0392B; }
+
+  /* ── Tabla de seguimiento (mes a mes) reutilizada en Grupo Idirin y
+     dentro del tab de cada empresa — mismos tokens que .grp-acum-matrix. ── */
+  #seguimientoCreditoCont { margin-top: 4px; }
+  #seguimientoCreditoCont .creditos-vacio { text-align: left; padding: 6px 0; }
 
   /* ── PLAN ── */
   .plan-lista {
@@ -862,8 +1122,11 @@
      botón es exclusivo de admin y lector */
   body.modo-editor #tabWHSaldos,
   body.modo-editor #tabUnveilSaldos,
+  body.modo-editor #tabWHCreditos,
+  body.modo-editor #tabUnveilCreditos,
   body.modo-editor #tabGenericoSaldos,
-  body.modo-editor #tabGrupoSaldos { display: none !important; }
+  body.modo-editor #tabGrupoSaldos,
+  body.modo-editor #tabGrupoCreditos { display: none !important; }
 
   /* Ni la sección "Situación de crédito" en ninguna empresa */
   body.modo-editor #creditoSeccionHeader,
@@ -915,8 +1178,11 @@
      es exclusivo de admin y lector */
   body.modo-user #tabWHSaldos,
   body.modo-user #tabUnveilSaldos,
+  body.modo-user #tabWHCreditos,
+  body.modo-user #tabUnveilCreditos,
   body.modo-user #tabGenericoSaldos,
-  body.modo-user #tabGrupoSaldos { display: none !important; }
+  body.modo-user #tabGrupoSaldos,
+  body.modo-user #tabGrupoCreditos { display: none !important; }
 
   /* ══════════════════════════════════════════
      ROLES DE VISTA ACOTADA (modo-vista-acotada):
@@ -963,15 +1229,18 @@
   body.modo-vista-acotada #tabWHAcumulado,
   body.modo-vista-acotada #tabWHGastos,
   body.modo-vista-acotada #tabWHSaldos,
+  body.modo-vista-acotada #tabWHCreditos,
   body.modo-vista-acotada #tabUnveilEventos,
   body.modo-vista-acotada #tabUnveilAcumulado,
   body.modo-vista-acotada #tabUnveilGastos,
   body.modo-vista-acotada #tabUnveilSaldos,
+  body.modo-vista-acotada #tabUnveilCreditos,
   body.modo-vista-acotada #tabGenericoAcumulado,
   body.modo-vista-acotada #tabGenericoGastos,
   body.modo-vista-acotada #tabGenericoSaldos,
   body.modo-vista-acotada #tabGrupoAcumulado,
-  body.modo-vista-acotada #tabGrupoSaldos { display: none !important; }
+  body.modo-vista-acotada #tabGrupoSaldos,
+  body.modo-vista-acotada #tabGrupoCreditos { display: none !important; }
 
   /* Botones de UI que no aplican para estos roles */
   body.modo-vista-acotada .btn-cerrar-mes,
@@ -3913,6 +4182,7 @@
            Acumulado. El panel y su lógica se dejan intactos por si se
            quiere reactivar más adelante. -->
       <button class="dash-tab" data-tab="saldosgrupo" id="tabGrupoSaldos">Saldos</button>
+      <button class="dash-tab" data-tab="creditosgrupo" id="tabGrupoCreditos">Créditos</button>
     </div>
 
     <!-- PANEL ACTUAL -->
@@ -4050,6 +4320,19 @@
       </div>
     </div><!-- /panelGrupoSaldos -->
 
+    <!-- PANEL CRÉDITOS (Grupo Idirin) — sin botones de agregar/quitar,
+         sin campos editables: solo espejo de lo que ya está capturado
+         en Unveil y en NMH Baja Sur (lineasCreditoPorEmpresa /
+         registrosMensualesPorEmpresa). Puramente visual e informativo,
+         a petición explícita. -->
+    <div id="panelGrupoCreditos" style="display:none">
+      <p class="sec-label bold" style="margin-bottom:2px">Créditos bancarios — Grupo</p>
+      <div class="creditos-aviso-diseno">
+        Solo lectura: aquí se refleja lo que ya está capturado en el tab "Créditos" de Unveil y de NMH Baja Sur — para editarlo, entra a la empresa correspondiente.
+      </div>
+      <div id="creditosGrpEspejoCont"></div>
+    </div><!-- /panelGrupoCreditos -->
+
   </div>
 
   <!-- VISTA EMPRESA INDIVIDUAL -->
@@ -4070,6 +4353,7 @@
     <button class="dash-tab" type="button" id="tabUnveilAcumulado">Acumulado</button>
     <button class="dash-tab" type="button" id="tabUnveilGastos">Gastos</button>
     <button class="dash-tab" type="button" id="tabUnveilSaldos">Saldos</button>
+    <button class="dash-tab" type="button" id="tabUnveilCreditos">Créditos</button>
   </div>
 
   <!-- TABS exclusivos de WAREHOUSE RENTALS: Balance Mensual / Cobrado por Vendedor / Acumulado / Gastos / Saldos -->
@@ -4079,6 +4363,7 @@
     <button class="dash-tab" type="button" id="tabWHAcumulado">Acumulado</button>
     <button class="dash-tab" type="button" id="tabWHGastos">Gastos</button>
     <button class="dash-tab" type="button" id="tabWHSaldos">Saldos</button>
+    <button class="dash-tab" type="button" id="tabWHCreditos">Créditos</button>
   </div>
 
   <!-- TABS genéricos: para empresas sin tabs propios (Idirin Sobera, NMH Baja Sur, Bacari Studio) -->
@@ -4464,6 +4749,57 @@
     </div>
 
   </div><!-- /panelSaldos -->
+
+  <!-- PANEL CRÉDITOS BANCARIOS — solo UNVEIL y NMH Baja Sur (warehouse_rentals).
+       Dos partes independientes, según el documento de referencia:
+       A) Líneas de crédito: se crean una vez, casi no cambian — ficha
+          informativa (fechas, tasa, plazo, cláusula, terminación).
+          Nada de esto participa en ningún cálculo.
+       B) Registro mensual: se agrega mes a mes — el saldo actual de
+          CADA línea de crédito activa, más Efectivo disponible y Pago
+          capital. El sistema calcula solo Total préstamo bancario
+          (suma de saldos) y Deuda neta (Total − Efectivo − Pago).
+       ⚠️ FASE DE DISEÑO A PETICIÓN EXPLÍCITA: nada de esto tiene
+       data-field, así que attachEditableListeners()/onEdit() lo
+       ignoran por completo — no hay guardarCampo() ni sbRequest() en
+       todo el módulo. Cuando se confirme el diseño, aquí es donde se
+       conecta el guardado real. -->
+  <div id="panelCreditosBancarios" style="display:none">
+    <p class="sec-label bold" style="margin-bottom:2px">
+      Créditos bancarios — <span id="creditosEmpresaLabel">Unveil</span>
+    </p>
+    <div class="creditos-aviso-diseno">
+      Vista de diseño: lo que captures aquí todavía no se guarda — es para revisar cómo se ve y cómo se calculan los totales antes de conectarlo a la base de datos.
+    </div>
+
+    <!-- PARTE A: Líneas de crédito -->
+    <div class="sec-header-row">
+      <p class="sec-label bold" style="margin:0">Líneas de crédito</p>
+      <button class="btn-add-circular" id="btnAgregarLineaCredito" type="button" title="Agregar línea de crédito">+</button>
+    </div>
+    <p class="creditos-parte-nota">Se capturan una sola vez — términos y condiciones de cada crédito, sin efecto en ningún cálculo.</p>
+    <div id="lineasCreditoCont"></div>
+    <p class="creditos-vacio" id="lineasCreditoVacio">Sin líneas de crédito capturadas — dale al "+" para agregar la primera</p>
+
+    <div class="ornamento">— · —</div>
+
+    <!-- PARTE B: Registro mensual -->
+    <div class="sec-header-row">
+      <p class="sec-label bold" style="margin:0">Registro mensual</p>
+      <button class="btn-add-circular" id="btnAgregarRegistroMensual" type="button" title="Agregar registro del mes">+</button>
+    </div>
+    <p class="creditos-parte-nota">Uno por mes: el saldo actual de cada línea de crédito, más Efectivo disponible y Pago capital.</p>
+    <div id="registrosMensualesCont"></div>
+    <p class="creditos-vacio" id="registrosMensualesVacio">Sin registros mensuales — dale al "+" para agregar el de este mes</p>
+
+    <div class="ornamento">— · —</div>
+
+    <!-- PARTE C: Seguimiento — misma tabla que ve Grupo Idirin, para
+         que dentro de la propia empresa también se vea de un vistazo
+         cómo baja la deuda mes con mes. -->
+    <p class="sec-label bold" style="margin:0 0 2px">Seguimiento mes a mes</p>
+    <div id="seguimientoCreditoCont"></div>
+  </div><!-- /panelCreditosBancarios -->
 
   <!-- PANEL RENTABILIDAD DE EVENTOS (solo UNVEIL) -->
   <div id="panelEventosUnveil" style="display:none">
@@ -7712,6 +8048,10 @@ async function initApp() {
   // Inicializar tabs "Cobrado por Vendedor" (exclusivo WAREHOUSE RENTALS)
   initTabsWH();
 
+  // Inicializar "Créditos bancarios" (exclusivo UNVEIL y NMH Baja Sur —
+  // fase de diseño, ver entrarTabCreditos()/recalcularCreditosBancarios())
+  initCreditosBancarios();
+
   // Inicializar módulo "Acumulado" (exclusivo WAREHOUSE RENTALS)
   initAcumuladoWH();
 
@@ -7760,6 +8100,13 @@ function initHistorico() {
       entrarTabSaldosGrupo();
     });
   }
+  const tabGrupoCreditos = document.getElementById('tabGrupoCreditos');
+  if (tabGrupoCreditos) {
+    tabGrupoCreditos.addEventListener('click', () => {
+      cambiarTab('creditosgrupo');
+      entrarTabCreditosGrupo();
+    });
+  }
 
   document.getElementById('btnAnioAnterior').addEventListener('click', async () => {
     histAnioActual--;
@@ -7790,12 +8137,15 @@ function cambiarTab(tab) {
   const esHistorico   = tab === 'historico';
   const esAcumulado   = tab === 'acumulado';
   const esSaldosGrupo = tab === 'saldosgrupo';
+  const esCreditosGrupo = tab === 'creditosgrupo';
   document.getElementById('tabActual').classList.toggle('active', esActual);
   document.getElementById('tabHistorico').classList.toggle('active', esHistorico);
   const tabAcum = document.getElementById('tabGrupoAcumulado');
   if (tabAcum) tabAcum.classList.toggle('active', esAcumulado);
   const tabSaldosG = document.getElementById('tabGrupoSaldos');
   if (tabSaldosG) tabSaldosG.classList.toggle('active', esSaldosGrupo);
+  const tabCreditosG = document.getElementById('tabGrupoCreditos');
+  if (tabCreditosG) tabCreditosG.classList.toggle('active', esCreditosGrupo);
 
   document.getElementById('panelActual').style.display    = esActual    ? '' : 'none';
   document.getElementById('panelHistorico').style.display = esHistorico ? '' : 'none';
@@ -7803,6 +8153,8 @@ function cambiarTab(tab) {
   if (panelAcum) panelAcum.style.display = esAcumulado ? '' : 'none';
   const panelSaldosG = document.getElementById('panelGrupoSaldos');
   if (panelSaldosG) panelSaldosG.style.display = esSaldosGrupo ? '' : 'none';
+  const panelCreditosG = document.getElementById('panelGrupoCreditos');
+  if (panelCreditosG) panelCreditosG.style.display = esCreditosGrupo ? '' : 'none';
 
   // Al volver a "Este mes" siempre resetear al mes real de hoy y recargar.
   if (esActual) {
@@ -8087,11 +8439,13 @@ function cambiarTabUnveil(tab) {
   const esAcumulado = tab === 'acumulado';
   const esGastos    = tab === 'gastos';
   const esSaldos    = tab === 'saldos';
+  const esCreditos  = tab === 'creditos';
   const tabBalance   = document.getElementById('tabUnveilBalance');
   const tabEventos   = document.getElementById('tabUnveilEventos');
   const tabAcumulado = document.getElementById('tabUnveilAcumulado');
   const tabGastos    = document.getElementById('tabUnveilGastos');
   const tabSaldos    = document.getElementById('tabUnveilSaldos');
+  const tabCreditos  = document.getElementById('tabUnveilCreditos');
   if (!tabBalance || !tabEventos) return;
 
   tabBalance.classList.toggle('active', esBalance);
@@ -8099,6 +8453,7 @@ function cambiarTabUnveil(tab) {
   if (tabAcumulado) tabAcumulado.classList.toggle('active', esAcumulado);
   if (tabGastos) tabGastos.classList.toggle('active', esGastos);
   if (tabSaldos) tabSaldos.classList.toggle('active', esSaldos);
+  if (tabCreditos) tabCreditos.classList.toggle('active', esCreditos);
 
   document.getElementById('panelBalanceEmpresa').style.display = esBalance   ? '' : 'none';
   document.getElementById('panelEventosUnveil').style.display  = esEventos   ? '' : 'none';
@@ -8107,6 +8462,8 @@ function cambiarTabUnveil(tab) {
   document.getElementById('panelGastos').style.display         = esGastos    ? '' : 'none';
   const panelSaldos = document.getElementById('panelSaldos');
   if (panelSaldos) panelSaldos.style.display = esSaldos ? '' : 'none';
+  const panelCreditos = document.getElementById('panelCreditosBancarios');
+  if (panelCreditos) panelCreditos.style.display = esCreditos ? '' : 'none';
 
   // El selector de "Mes" aplica a Balance, Acumulado, Gastos y Saldos
   // (los cuatro parten de datos mensuales), pero NO a Rentabilidad de
@@ -8121,6 +8478,7 @@ function cambiarTabUnveil(tab) {
   if (esGastos) {
     actualizarBarrasGastos();
   }
+  if (esCreditos) entrarTabCreditos();
 }
 
 // ── Listeners estáticos del módulo (se enganchan una sola vez) ──
@@ -8133,6 +8491,8 @@ function initEventosUnveil() {
   if (tabUnveilGastos) tabUnveilGastos.addEventListener('click', () => cambiarTabUnveil('gastos'));
   const tabUnveilSaldos = document.getElementById('tabUnveilSaldos');
   if (tabUnveilSaldos) tabUnveilSaldos.addEventListener('click', () => cambiarTabUnveil('saldos'));
+  const tabUnveilCreditos = document.getElementById('tabUnveilCreditos');
+  if (tabUnveilCreditos) tabUnveilCreditos.addEventListener('click', () => cambiarTabUnveil('creditos'));
 
   document.getElementById('btnEventsAnioAnterior').addEventListener('click', async () => {
     eventosAnioActual--;
@@ -8440,11 +8800,13 @@ function cambiarTabWH(tab) {
   const esAcumulado = tab === 'acumulado';
   const esGastos    = tab === 'gastos';
   const esSaldos    = tab === 'saldos';
+  const esCreditos  = tab === 'creditos';
   const tabBalance   = document.getElementById('tabWHBalance');
   const tabVend      = document.getElementById('tabWHVendedores');
   const tabAcumulado = document.getElementById('tabWHAcumulado');
   const tabGastos    = document.getElementById('tabWHGastos');
   const tabSaldos    = document.getElementById('tabWHSaldos');
+  const tabCreditos  = document.getElementById('tabWHCreditos');
   if (!tabBalance || !tabVend) return;
 
   tabBalance.classList.toggle('active', esBalance);
@@ -8452,6 +8814,7 @@ function cambiarTabWH(tab) {
   if (tabAcumulado) tabAcumulado.classList.toggle('active', esAcumulado);
   if (tabGastos) tabGastos.classList.toggle('active', esGastos);
   if (tabSaldos) tabSaldos.classList.toggle('active', esSaldos);
+  if (tabCreditos) tabCreditos.classList.toggle('active', esCreditos);
 
   document.getElementById('panelBalanceEmpresa').style.display = esBalance   ? '' : 'none';
   document.getElementById('panelVendedoresWH').style.display   = esVend      ? '' : 'none';
@@ -8460,6 +8823,8 @@ function cambiarTabWH(tab) {
   document.getElementById('panelGastos').style.display         = esGastos    ? '' : 'none';
   const panelSaldos = document.getElementById('panelSaldos');
   if (panelSaldos) panelSaldos.style.display = esSaldos ? '' : 'none';
+  const panelCreditos = document.getElementById('panelCreditosBancarios');
+  if (panelCreditos) panelCreditos.style.display = esCreditos ? '' : 'none';
 
   if (esVend) {
     // Repintar el grid completo (no solo las barras) cada vez que se
@@ -8477,6 +8842,7 @@ function cambiarTabWH(tab) {
   if (esGastos) {
     actualizarBarrasGastos();
   }
+  if (esCreditos) entrarTabCreditos();
 }
 
 // ── Lógica de "acabo de entrar al tab Acumulado", compartida por los 3
@@ -8524,19 +8890,641 @@ function entrarTabAcumulado() {
   }
 }
 
-// ── Listener estático del módulo (se engancha una sola vez) ──
+// ═══════════════════════════════════════════════════
+// CRÉDITOS BANCARIOS (Unveil, NMH Baja Sur y Grupo Idirin)
+// ═══════════════════════════════════════════════════
+// FASE DE DISEÑO, a petición explícita: nada de esto tiene data-field,
+// así que attachEditableListeners()/onEdit() lo ignoran por completo —
+// no hay guardarCampo() ni sbRequest() en todo este bloque. Cuando se
+// confirme el diseño, aquí es donde se conecta el guardado real.
+//
+// Dos partes independientes, según el documento de referencia:
+//   A) Líneas de crédito — se crean una vez, casi no cambian. Ficha
+//      informativa (fecha de crédito, fecha de corte, fecha de pago,
+//      tasa, plazo, cláusula, terminación). Nada de esto entra en
+//      ningún cálculo — es puramente de consulta.
+//   B) Registro mensual — se agrega mes a mes. Por cada línea de
+//      crédito ACTIVA en ese momento, se captura su saldo; más
+//      Efectivo disponible y Pago capital. El sistema calcula:
+//        Total préstamo bancario = suma de los saldos de ese registro
+//        Deuda neta = Total − Efectivo disponible − Pago capital
+//
+// Grupo Idirin ya NO tiene su propia versión editable: solo arma un
+// espejo de solo lectura leyendo lineasCreditoPorEmpresa /
+// registrosMensualesPorEmpresa de unveil y warehouse_rentals.
+//
+// IMPORTANTE: cada objeto guarda sus valores completos en memoria (no
+// solo el id) — así, al salir del tab de una empresa (o cambiar a la
+// otra) y volver, lo que se había escrito sigue ahí durante toda la
+// sesión del navegador (se pierde solo al recargar la página, ya que
+// nada de esto se manda a Supabase todavía).
+
+// ── Datos reales cargados del documento "CONTROL CRÉDITOS UV Y WH" ──
+// Estado actual (agosto 2026): líneas de crédito vigentes de cada
+// empresa + el registro mensual más reciente ya capturado (Agosto
+// 2026), con los mismos montos que el Excel de referencia. A partir
+// de aquí, cada mes nuevo se agrega con el botón "+" de "Registro
+// mensual" y queda apilado debajo — así se ve, mes con mes, cómo se
+// va restando el saldo de cada línea.
+let lineasCreditoPorEmpresa = {
+  unveil: [
+    { id: 'lc_uv_revolvente', nombre: 'Revolvente UV', monto: '$4,200,000.00', fechaCredito: '20/03/2024', fechaCorte: '02 de cada mes', fechaPago: '12 de cada mes', tasa: '', plazo: 'Renovación automática anual', clausula: 'Décima cuarta', terminacion: 'Solicitud por escrito — Vigésima quinta' },
+    { id: 'lc_uv_simple',     nombre: 'Crédito simple UV', monto: '$12,800,000.00', fechaCredito: '18/06/2026', fechaCorte: '', fechaPago: '02 de cada mes', tasa: '', plazo: '60 meses', clausula: '', terminacion: 'A plazo' },
+  ],
+  warehouse_rentals: [
+    { id: 'lc_wh_revolvente', nombre: 'Revolvente WH', monto: '$6,000,000.00', fechaCredito: '01/10/2025', fechaCorte: '02 de cada mes', fechaPago: '12 de cada mes', tasa: '', plazo: 'Renovación automática anual', clausula: 'Décima cuarta', terminacion: 'Solicitud por escrito — Vigésima quinta' },
+  ],
+};
+// cada línea: { id, nombre, monto, fechaCredito, fechaCorte, fechaPago, tasa, plazo, clausula, terminacion }
+let registrosMensualesPorEmpresa = {
+  unveil: [
+    { id: 'rm_uv_ago2026', etiqueta: 'Agosto 2026', efectivo: '$1,822,405.92', pago: '$217,796.61', saldos: { lc_uv_revolvente: '$0.00', lc_uv_simple: '$12,850,000.00' } },
+  ],
+  warehouse_rentals: [
+    { id: 'rm_wh_ago2026', etiqueta: 'Agosto 2026', efectivo: '$1,822,405.92', pago: '$217,796.61', saldos: { lc_wh_revolvente: '$6,000,000.00' } },
+  ],
+};
+// cada registro: { id, etiqueta, efectivo, pago, saldos: { [lineaId]: valorTexto } }
+
+// ═══ PARTE A: Líneas de crédito ═══
+
+function crearLineaCredito(linea) {
+  const card = document.createElement('div');
+  card.className = 'credito-registro-card linea-credito-card';
+  card.dataset.lineaId = linea.id;
+  card.innerHTML = `
+    <span class="credito-row-remove creditos-registro-remove" title="Quitar esta línea">×</span>
+    <div class="linea-credito-header">
+      <span class="linea-credito-titulo" contenteditable="true" data-campo="nombre" data-placeholder="Nombre de la línea (ej. Revolvente UV)">${escapeHTML(linea.nombre || '')}</span>
+      <span class="linea-credito-monto" contenteditable="true" data-campo="monto" data-placeholder="$0">${escapeHTML(linea.monto || '')}</span>
+    </div>
+    <div class="creditos-mini-grid">
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Fecha de crédito</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="fechaCredito" data-placeholder="dd/mm/aaaa">${escapeHTML(linea.fechaCredito || '')}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Fecha de corte</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="fechaCorte" data-placeholder="Ej. 02 de cada mes">${escapeHTML(linea.fechaCorte || '')}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Fecha de pago</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="fechaPago" data-placeholder="Ej. 12 de cada mes">${escapeHTML(linea.fechaPago || '')}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Tasa de interés %</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="tasa" data-placeholder="—">${escapeHTML(linea.tasa || '')}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Plazo</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="plazo" data-placeholder="Ej. 60 meses">${escapeHTML(linea.plazo || '')}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Cláusula</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="clausula" data-placeholder="—">${escapeHTML(linea.clausula || '')}</span>
+      </div>
+    </div>
+    <div class="creditos-campo creditos-campo-full">
+      <span class="creditos-campo-label">Terminación</span>
+      <span class="creditos-campo-valor" contenteditable="true" data-campo="terminacion" data-placeholder="Ej. Solicitud por escrito">${escapeHTML(linea.terminacion || '')}</span>
+    </div>
+  `;
+
+  card.querySelectorAll('[data-campo]').forEach(el => {
+    const campo = el.dataset.campo;
+    el.addEventListener('paste', e => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, txt);
+    });
+    el.addEventListener('input', () => { linea[campo] = el.textContent; });
+    if (campo === 'monto') {
+      el.addEventListener('blur', () => {
+        el.textContent = el.textContent.trim() ? formatMXN(parseMXN(el.textContent)) : '';
+        linea.monto = el.textContent;
+      });
+    }
+    if (campo === 'nombre') {
+      el.addEventListener('input', () => sincronizarNombreLineaEnRegistros(linea.id, el.textContent));
+    }
+  });
+
+  card.querySelector('.creditos-registro-remove').addEventListener('click', () => quitarLineaCredito(linea.id));
+  return card;
+}
+
+// Si cambia el nombre de una línea, refleja el nuevo nombre en la
+// etiqueta de esa columna dentro de cada registro mensual ya creado
+// (evita tener que volver a entrar al tab para verlo actualizado).
+function sincronizarNombreLineaEnRegistros(lineaId, nombreNuevo) {
+  const nombre = nombreNuevo.trim() || 'Línea sin nombre';
+  document.querySelectorAll(`.creditos-campo-saldo[data-linea-id="${lineaId}"] .creditos-campo-label`).forEach(lbl => {
+    lbl.textContent = nombre;
+  });
+}
+
+function entrarParteLineasCredito() {
+  const cont  = document.getElementById('lineasCreditoCont');
+  const vacio = document.getElementById('lineasCreditoVacio');
+  if (!cont) return;
+  cont.innerHTML = '';
+  const lista = lineasCreditoPorEmpresa[empresaActual] || (lineasCreditoPorEmpresa[empresaActual] = []);
+  lista.forEach(l => cont.appendChild(crearLineaCredito(l)));
+  if (vacio) vacio.style.display = lista.length ? 'none' : '';
+}
+
+function agregarLineaCredito() {
+  const id = 'lc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const linea = { id, nombre: '', monto: '', fechaCredito: '', fechaCorte: '', fechaPago: '', tasa: '', plazo: '', clausula: '', terminacion: '' };
+  const lista = lineasCreditoPorEmpresa[empresaActual] || (lineasCreditoPorEmpresa[empresaActual] = []);
+  lista.push(linea);
+
+  const cont  = document.getElementById('lineasCreditoCont');
+  const vacio = document.getElementById('lineasCreditoVacio');
+  const card  = crearLineaCredito(linea);
+  cont.appendChild(card);
+  if (vacio) vacio.style.display = 'none';
+  const primerCampo = card.querySelector('.linea-credito-titulo');
+  if (primerCampo) primerCampo.focus();
+
+  // Agrega, en vivo, una columna de saldo para esta línea nueva en
+  // cada registro mensual que ya exista — así no hace falta salir y
+  // volver a entrar al tab para que aparezca.
+  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
+  document.querySelectorAll('#registrosMensualesCont .credito-registro-card').forEach(regCard => {
+    const registro = registros.find(r => r.id === regCard.dataset.registroId);
+    if (registro) agregarColumnaSaldoARegistro(regCard, registro, id, '');
+  });
+}
+
+function quitarLineaCredito(id) {
+  const card = document.querySelector(`#lineasCreditoCont .credito-registro-card[data-linea-id="${id}"]`);
+  if (card) card.remove();
+  const lista = lineasCreditoPorEmpresa[empresaActual];
+  if (lista) lineasCreditoPorEmpresa[empresaActual] = lista.filter(l => l.id !== id);
+  const vacio = document.getElementById('lineasCreditoVacio');
+  const cont  = document.getElementById('lineasCreditoCont');
+  if (vacio && cont) vacio.style.display = cont.children.length ? 'none' : '';
+
+  // Quita, en vivo, la columna de saldo de esta línea de cada registro
+  // mensual existente (memoria + DOM) y recalcula sus totales.
+  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
+  document.querySelectorAll('#registrosMensualesCont .credito-registro-card').forEach(regCard => {
+    const celda = regCard.querySelector(`.creditos-campo-saldo[data-linea-id="${id}"]`);
+    if (celda) celda.remove();
+    const registro = registros.find(r => r.id === regCard.dataset.registroId);
+    if (registro && registro.saldos) delete registro.saldos[id];
+    if (registro) recalcularRegistroMensual(regCard, registro);
+  });
+  renderSeguimientoCreditoActual();
+}
+
+function initLineasCredito() {
+  const btn = document.getElementById('btnAgregarLineaCredito');
+  if (btn) btn.addEventListener('click', agregarLineaCredito);
+}
+
+// ═══ PARTE B: Registro mensual ═══
+
+// Agrega la celda de saldo de una línea de crédito específica a un
+// registro mensual ya creado (usado tanto al crear el registro por
+// primera vez como al agregar una línea nueva en vivo).
+function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
+  if (!registro.saldos) registro.saldos = {};
+  if (registro.saldos[lineaId] === undefined) registro.saldos[lineaId] = formatMXN(0);
+
+  const grid = card.querySelector('.creditos-mini-grid');
+  const div = document.createElement('div');
+  div.className = 'creditos-campo creditos-campo-saldo';
+  div.dataset.lineaId = lineaId;
+  div.innerHTML = `
+    <span class="creditos-campo-label">${escapeHTML(nombreLinea || 'Línea sin nombre')}</span>
+    <span class="creditos-campo-valor" contenteditable="true" data-linea="${lineaId}">${escapeHTML(registro.saldos[lineaId] || formatMXN(0))}</span>
+  `;
+  // Los 4 campos fijos (total/efectivo/pago/deuda) van siempre al
+  // final — las columnas de saldo se insertan justo antes de ellas.
+  const totalCampo = grid.querySelector('.campo-total');
+  grid.insertBefore(div, totalCampo);
+
+  const valorEl = div.querySelector('[data-linea]');
+  valorEl.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, txt);
+  });
+  valorEl.addEventListener('input', () => {
+    registro.saldos[lineaId] = valorEl.textContent;
+    recalcularRegistroMensual(card, registro);
+  });
+  valorEl.addEventListener('blur', () => {
+    valorEl.textContent = formatMXN(parseMXN(valorEl.textContent));
+    registro.saldos[lineaId] = valorEl.textContent;
+    recalcularRegistroMensual(card, registro);
+  });
+}
+
+function crearRegistroMensual(registro) {
+  const card = document.createElement('div');
+  card.className = 'credito-registro-card';
+  card.dataset.registroId = registro.id;
+  card.innerHTML = `
+    <span class="credito-row-remove creditos-registro-remove" title="Quitar este registro">×</span>
+    <p class="credito-registro-etiqueta" contenteditable="true" data-placeholder="Mes o fecha de este registro (ej. Agosto 2026)">${escapeHTML(registro.etiqueta || '')}</p>
+    <div class="creditos-mini-grid">
+      <div class="creditos-campo campo-total">
+        <span class="creditos-campo-label">Total préstamo bancario</span>
+        <span class="creditos-campo-valor" data-auto="true" data-campo="total">$0</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Efectivo disponible</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
+      </div>
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">Pago capital</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="pago">${escapeHTML(registro.pago || formatMXN(0))}</span>
+      </div>
+      <div class="creditos-campo campo-deuda">
+        <span class="creditos-campo-label">Deuda neta</span>
+        <span class="creditos-campo-valor" data-auto="true" data-campo="deuda">$0</span>
+      </div>
+    </div>
+  `;
+
+  card.querySelector('.credito-registro-etiqueta').addEventListener('input', function() {
+    registro.etiqueta = this.textContent;
+  });
+
+  // Una columna de saldo por cada línea de crédito ACTUALMENTE activa
+  // en esta empresa — se insertan antes de "Total préstamo bancario".
+  const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
+  lineas.forEach(l => agregarColumnaSaldoARegistro(card, registro, l.id, l.nombre));
+
+  ['efectivo', 'pago'].forEach(campo => {
+    const el = card.querySelector(`[data-campo="${campo}"]`);
+    el.addEventListener('paste', e => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, txt);
+    });
+    el.addEventListener('input', () => {
+      registro[campo] = el.textContent;
+      recalcularRegistroMensual(card, registro);
+    });
+    el.addEventListener('blur', () => {
+      el.textContent = formatMXN(parseMXN(el.textContent));
+      registro[campo] = el.textContent;
+      recalcularRegistroMensual(card, registro);
+    });
+  });
+
+  card.querySelector('.creditos-registro-remove').addEventListener('click', () => quitarRegistroMensual(registro.id));
+  recalcularRegistroMensual(card, registro);
+  return card;
+}
+
+// Deuda neta de un registro: Total de saldos de sus líneas, menos
+// Efectivo disponible, menos Pago capital — misma fórmula que ya
+// calcula recalcularRegistroMensual() a partir del DOM.
+function calcularDeudaDeRegistro(registro) {
+  const totalSaldos = Object.values((registro && registro.saldos) || {}).reduce((s, v) => s + parseMXN(v), 0);
+  return totalSaldos - parseMXN(registro && registro.efectivo) - parseMXN(registro && registro.pago);
+}
+
+function recalcularRegistroMensual(card, registro) {
+  let totalSaldos = 0;
+  card.querySelectorAll('.creditos-campo-saldo [data-linea]').forEach(el => {
+    totalSaldos += parseMXN(el.textContent);
+  });
+  const efectivo = parseMXN(card.querySelector('[data-campo="efectivo"]').textContent);
+  const pago     = parseMXN(card.querySelector('[data-campo="pago"]').textContent);
+  const deuda    = totalSaldos - efectivo - pago;
+
+  card.querySelector('[data-campo="total"]').textContent = formatMXN(totalSaldos);
+  card.querySelector('[data-campo="deuda"]').textContent = formatMXN(deuda);
+
+  renderSeguimientoCreditoActual();
+}
+
+function entrarParteRegistrosMensuales() {
+  const cont  = document.getElementById('registrosMensualesCont');
+  const vacio = document.getElementById('registrosMensualesVacio');
+  if (!cont) return;
+  cont.innerHTML = '';
+  const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
+  lista.forEach(r => cont.appendChild(crearRegistroMensual(r)));
+  if (vacio) vacio.style.display = lista.length ? 'none' : '';
+}
+
+function agregarRegistroMensual() {
+  const id = 'rm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
+
+  // El nuevo registro arranca con Efectivo disponible y cada saldo de
+  // línea en $0.00 — el usuario captura cada valor a mano cada mes.
+  // Único campo con valor por defecto distinto: Pago capital, que es
+  // fijo. Se usa formatMXN(0) para que el formato sea idéntico al que
+  // se aplica en cualquier otro campo de moneda del sistema.
+  const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
+  const saldos = {};
+  lineas.forEach(l => { saldos[l.id] = formatMXN(0); });
+
+  const registro = {
+    id,
+    etiqueta: '',
+    efectivo: formatMXN(0),
+    pago: '$217,895.61',
+    saldos,
+  };
+  lista.push(registro);
+
+  const cont  = document.getElementById('registrosMensualesCont');
+  const vacio = document.getElementById('registrosMensualesVacio');
+  const card  = crearRegistroMensual(registro);
+  cont.appendChild(card);
+  if (vacio) vacio.style.display = 'none';
+  const primerCampo = card.querySelector('.credito-registro-etiqueta');
+  if (primerCampo) primerCampo.focus();
+  renderSeguimientoCreditoActual();
+}
+
+function quitarRegistroMensual(id) {
+  const lista = registrosMensualesPorEmpresa[empresaActual];
+  if (lista) registrosMensualesPorEmpresa[empresaActual] = lista.filter(r => r.id !== id);
+  // Se reconstruye toda la parte B para que las flechitas de "vs. mes
+  // anterior" queden correctas al recalcular la cadena de registros.
+  entrarParteRegistrosMensuales();
+  renderSeguimientoCreditoActual();
+}
+
+function initRegistrosMensuales() {
+  const btn = document.getElementById('btnAgregarRegistroMensual');
+  if (btn) btn.addEventListener('click', agregarRegistroMensual);
+}
+
+// ── Punto de entrada del tab (Unveil / WH) ──
+function entrarTabCreditos() {
+  const nombreCorto = empresaActual === 'unveil' ? 'Unveil' : 'NMH Baja Sur';
+  const lbl = document.getElementById('creditosEmpresaLabel');
+  if (lbl) lbl.textContent = nombreCorto;
+  entrarParteLineasCredito();
+  entrarParteRegistrosMensuales();
+  renderSeguimientoCreditoActual();
+}
+
+function initCreditosBancarios() {
+  initLineasCredito();
+  initRegistrosMensuales();
+}
+
+// ═══ Unveil / NMH Baja Sur / Grupo Idirin — las tres CONECTADAS ═══
+// Las tres leen exactamente los mismos objetos en memoria
+// (lineasCreditoPorEmpresa / registrosMensualesPorEmpresa): lo que se
+// captura en el tab "Créditos" de Unveil o de NMH Baja Sur se refleja
+// de inmediato tanto en su propia tabla de seguimiento como en la
+// vista combinada de Grupo Idirin — no hace falta capturar nada dos
+// veces.
+const CREDITOS_GRP_EMPRESAS = [
+  { id: 'unveil', nombre: 'Unveil' },
+  { id: 'warehouse_rentals', nombre: 'NMH Baja Sur' },
+];
+
+// Columnas (líneas de crédito) en el orden del Excel: primero las
+// líneas "revolvente" de cada empresa, luego el resto.
+function creditosGrpColumnas() {
+  const columnas = [];
+  CREDITOS_GRP_EMPRESAS.forEach(emp => {
+    (lineasCreditoPorEmpresa[emp.id] || []).forEach(l => columnas.push({ ...l, empresaId: emp.id }));
+  });
+  const revolventes = columnas.filter(c => /revolvente/i.test(c.nombre || ''));
+  const otras       = columnas.filter(c => !/revolvente/i.test(c.nombre || ''));
+  return [...revolventes, ...otras];
+}
+
+// Etiquetas de mes (ej. "Agosto 2026"), en el orden en que se
+// capturaron, sin duplicar si ambas empresas usan el mismo texto.
+function creditosGrpEtiquetas() {
+  const vistos = new Set();
+  const etiquetas = [];
+  CREDITOS_GRP_EMPRESAS.forEach(emp => {
+    (registrosMensualesPorEmpresa[emp.id] || []).forEach(r => {
+      const key = (r.etiqueta || '').trim().toLowerCase();
+      if (key && !vistos.has(key)) { vistos.add(key); etiquetas.push(r.etiqueta.trim()); }
+    });
+  });
+  return etiquetas;
+}
+
+// Tabla de "seguimiento mes a mes" de UNA empresa: una fila por cada
+// momento (Monto original + un registro mensual por fila), una
+// columna por cada línea de crédito de esa empresa, más Total
+// préstamo y Deuda neta — con la flechita de cuánto bajó (o subió)
+// respecto al renglón de arriba. La usan tanto el tab de la propia
+// empresa (Unveil/NMH) como el espejo de Grupo Idirin: MISMA función,
+// para que las tres vistas queden siempre conectadas y consistentes.
+function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
+  const lineasEmp = lineasCreditoPorEmpresa[empresaId] || [];
+  const registros = registrosMensualesPorEmpresa[empresaId] || [];
+  if (lineasEmp.length === 0) {
+    return '<p class="creditos-vacio">Agrega al menos una línea de crédito para ver el seguimiento</p>';
+  }
+  const filas = [
+    { etiqueta: 'Monto original', esReg: false },
+    ...registros.map(r => ({ etiqueta: r.etiqueta || 'Sin etiqueta', registro: r, esReg: true })),
+  ];
+
+  const valoresDeFila = (f) => f.esReg
+    ? lineasEmp.map(l => (f.registro.saldos && f.registro.saldos[l.id] !== undefined) ? parseMXN(f.registro.saldos[l.id]) : null)
+    : lineasEmp.map(l => parseMXN(l.monto));
+
+  const deudaDeFila = (f, valores) => {
+    const total = valores.reduce((s, v) => s + (v || 0), 0);
+    if (!f.esReg) return total;
+    return total - parseMXN(f.registro.efectivo) - parseMXN(f.registro.pago);
+  };
+
+  const filasHTML = filas.map((f, i) => {
+    const valores = valoresDeFila(f);
+    const total   = valores.reduce((s, v) => s + (v || 0), 0);
+    const deuda   = deudaDeFila(f, valores);
+    return `
+      <tr>
+        <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
+        ${valores.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    ${tituloOpcional ? `<p class="creditos-espejo-subtitulo" style="margin-top:20px">${escapeHTML(tituloOpcional)}</p>` : ''}
+    <div class="grp-acum-matrix-wrap">
+      <table class="grp-acum-matrix">
+        <thead>
+          <tr>
+            <th class="grp-acum-matrix-empresa">Mes</th>
+            ${lineasEmp.map(l => `<th>${escapeHTML(l.nombre || 'Línea')}</th>`).join('')}
+            <th>Total préstamo</th>
+            <th>Deuda neta pendiente</th>
+          </tr>
+        </thead>
+        <tbody>${filasHTML}</tbody>
+      </table>
+    </div>`;
+}
+
+// Refresca la tabla de seguimiento dentro del propio tab de la
+// empresa activa (Unveil o NMH) — se llama cada vez que algo cambia
+// en Líneas de crédito o en Registro mensual, para que "cuánto baja"
+// se vea al instante sin salir del tab.
+function renderSeguimientoCreditoActual() {
+  const cont = document.getElementById('seguimientoCreditoCont');
+  if (!cont) return;
+  cont.innerHTML = construirTablaSeguimientoLineasHTML(empresaActual);
+}
+
+// ── Tarjetas de "información fija" (amarillo, como en el Excel de
+// referencia): datos que NO cambian mes a mes — fecha de crédito,
+// fecha de corte, fechas de pago, plazo, cláusula, terminación —
+// mostradas una vez por línea, para las dos empresas juntas. ──
+function creditosInfoFijaHTML(columnas) {
+  const nombreEmpresa = (id) => (CREDITOS_GRP_EMPRESAS.find(e => e.id === id) || {}).nombre || '';
+  const filaOpc = (label, val) => val ? `<span>${escapeHTML(label)}: ${escapeHTML(val)}</span>` : '';
+  return `
+    <p class="creditos-espejo-subtitulo" style="margin-top:20px">Información fija de cada línea</p>
+    <div class="creditos-info-fija-grid">
+      ${columnas.map(c => `
+        <div class="creditos-info-fija-card">
+          <p class="creditos-info-fija-titulo">${escapeHTML(c.nombre || 'Línea')} <span class="creditos-info-fija-empresa">— ${escapeHTML(nombreEmpresa(c.empresaId))}</span></p>
+          <p class="creditos-info-fija-monto">${escapeHTML(c.monto || '—')}</p>
+          <div class="creditos-info-fija-filas">
+            ${filaOpc('Fecha de crédito', c.fechaCredito)}
+            ${filaOpc('Fecha de corte', c.fechaCorte)}
+            ${filaOpc('Fecha de pago', c.fechaPago)}
+            ${filaOpc('Tasa de interés', c.tasa)}
+            ${filaOpc('Plazo', c.plazo)}
+            ${filaOpc('Cláusula', c.clausula)}
+            ${filaOpc('Terminación', c.terminacion)}
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ═══ Grupo Idirin: espejo de solo lectura ═══
+// Sin botones de agregar/quitar, sin contenteditable — solo lee el
+// estado actual (en memoria, no del DOM) de Unveil y NMH Baja Sur.
+//
+// Se arma UNA sola tabla combinada (misma idea que la primera tabla
+// del Excel "CONTROL CRÉDITOS UV Y WH"): una columna por cada línea
+// de crédito de ambas empresas (Revolvente UV, Revolvente WH, Crédito
+// simple UV, …), más Total préstamo bancario / Efectivo disponible /
+// Pago capital / Deuda neta combinados. Cada fila es un momento en el
+// tiempo: "Monto original" (lo que se dispersó de cada línea) y
+// después un renglón por cada mes ya registrado en CUALQUIERA de las
+// dos empresas (ej. "Agosto 2026") — así se ve, a nivel Grupo, cómo
+// se va abonando/restando mes con mes en ambas empresas a la vez.
+// Debajo va la "información fija" (amarillo) y el seguimiento de cada
+// empresa por separado — misma función que usa el tab individual.
+function entrarTabCreditosGrupo() {
+  const cont = document.getElementById('creditosGrpEspejoCont');
+  if (!cont) return;
+
+  const columnas  = creditosGrpColumnas();
+  const etiquetas = creditosGrpEtiquetas();
+
+  if (columnas.length === 0) {
+    cont.innerHTML = '<p class="creditos-vacio">Sin líneas de crédito capturadas todavía en Unveil ni en NMH Baja Sur</p>';
+    return;
+  }
+
+  // Busca, para una etiqueta de mes dada, el registro mensual de una
+  // empresa concreta que corresponda a ese mes (comparando texto).
+  const registroDe = (empresaId, etiqueta) => {
+    const key = etiqueta.trim().toLowerCase();
+    return (registrosMensualesPorEmpresa[empresaId] || []).find(r => (r.etiqueta || '').trim().toLowerCase() === key);
+  };
+
+  // Fila "Monto original": lo dispersado de cada línea, sin abonos.
+  const filaOriginal = { esOriginal: true, celdas: columnas.map(c => parseMXN(c.monto)) };
+
+  // Una fila por cada mes ya registrado (en cualquiera de las dos
+  // empresas), tomando el saldo de cada columna del registro de la
+  // empresa dueña de esa línea para ese mes.
+  const filasMeses = etiquetas.map(etiqueta => {
+    const celdas = columnas.map(c => {
+      const reg = registroDe(c.empresaId, etiqueta);
+      return reg && reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : null;
+    });
+    // Efectivo disponible y Pago capital son el mismo movimiento de
+    // caja reflejado en ambas empresas — se toma una sola vez (no se
+    // suman) del primer registro del mes que lo tenga capturado.
+    let efectivo = 0, pago = 0;
+    for (const emp of CREDITOS_GRP_EMPRESAS) {
+      const reg = registroDe(emp.id, etiqueta);
+      if (reg && (parseMXN(reg.efectivo) || parseMXN(reg.pago))) {
+        efectivo = parseMXN(reg.efectivo);
+        pago     = parseMXN(reg.pago);
+        break;
+      }
+    }
+    return { etiqueta, celdas, efectivo, pago };
+  });
+
+  const totalDe = (celdas) => celdas.reduce((sum, v) => sum + (v || 0), 0);
+
+  const filaHTML = (fila) => {
+    const total = totalDe(fila.celdas);
+    const efectivo = fila.esOriginal ? null : fila.efectivo;
+    const pago      = fila.esOriginal ? null : fila.pago;
+    const deuda     = fila.esOriginal ? total : total - efectivo - pago;
+    const etiquetaTxt = fila.esOriginal ? 'Monto original' : fila.etiqueta;
+    return `
+      <tr>
+        <td class="grp-acum-matrix-empresa">${escapeHTML(etiquetaTxt)}</td>
+        ${fila.celdas.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>
+        <td>${efectivo === null ? '—' : escapeHTML(formatMXN(efectivo))}</td>
+        <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
+      </tr>`;
+  };
+
+  cont.innerHTML = `
+    <div class="grp-acum-matrix-wrap">
+      <table class="grp-acum-matrix">
+        <thead>
+          <tr>
+            <th class="grp-acum-matrix-empresa">—</th>
+            ${columnas.map(c => `<th>${escapeHTML(c.nombre || 'Línea')}</th>`).join('')}
+            <th>Total préstamo</th>
+            <th>Efectivo disp.</th>
+            <th>Pago capital</th>
+            <th>Deuda neta</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filaHTML(filaOriginal)}
+          ${filasMeses.map(filaHTML).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="creditos-parte-nota" style="margin-top:10px">Efectivo disponible y Pago capital son el mismo movimiento reflejado en ambas empresas — se cuentan una sola vez por mes, no se suman.</p>
+    ${creditosInfoFijaHTML(columnas)}
+    ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.nombre} — seguimiento mes a mes`)).join('')}`;
+}
 function initTabsWH() {
   const tabBalance   = document.getElementById('tabWHBalance');
   const tabVend      = document.getElementById('tabWHVendedores');
   const tabAcumulado = document.getElementById('tabWHAcumulado');
   const tabGastos    = document.getElementById('tabWHGastos');
   const tabSaldos    = document.getElementById('tabWHSaldos');
+  const tabCreditos  = document.getElementById('tabWHCreditos');
   if (!tabBalance || !tabVend) return;
   tabBalance.addEventListener('click', () => cambiarTabWH('balance'));
   tabVend.addEventListener('click', () => cambiarTabWH('vendedores'));
   if (tabAcumulado) tabAcumulado.addEventListener('click', () => cambiarTabWH('acumulado'));
   if (tabGastos) tabGastos.addEventListener('click', () => cambiarTabWH('gastos'));
   if (tabSaldos) tabSaldos.addEventListener('click', () => cambiarTabWH('saldos'));
+  if (tabCreditos) tabCreditos.addEventListener('click', () => cambiarTabWH('creditos'));
 }
 
 // Renderiza las tarjetas de vendedores con los datos actuales
