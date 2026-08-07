@@ -4327,9 +4327,6 @@
          a petición explícita. -->
     <div id="panelGrupoCreditos" style="display:none">
       <p class="sec-label bold" style="margin-bottom:2px">Créditos bancarios — Grupo</p>
-      <div class="creditos-aviso-diseno">
-        Solo lectura: aquí se refleja lo que ya está capturado en el tab "Créditos" de Unveil y de NMH Baja Sur — para editarlo, entra a la empresa correspondiente.
-      </div>
       <div id="creditosGrpEspejoCont"></div>
     </div><!-- /panelGrupoCreditos -->
 
@@ -4759,18 +4756,14 @@
           CADA línea de crédito activa, más Efectivo disponible y Pago
           capital. El sistema calcula solo Total préstamo bancario
           (suma de saldos) y Deuda neta (Total − Efectivo − Pago).
-       ⚠️ FASE DE DISEÑO A PETICIÓN EXPLÍCITA: nada de esto tiene
-       data-field, así que attachEditableListeners()/onEdit() lo
-       ignoran por completo — no hay guardarCampo() ni sbRequest() en
-       todo el módulo. Cuando se confirme el diseño, aquí es donde se
-       conecta el guardado real. -->
+       Persistencia propia: tablas credito_lineas / credito_registros en
+       Supabase (no balance_diario, porque las líneas no son mensuales) —
+       ver guardarLineaCredito()/guardarRegistroMensual() y
+       cargarCreditosDesdeSupabase() en el JS. -->
   <div id="panelCreditosBancarios" style="display:none">
     <p class="sec-label bold" style="margin-bottom:2px">
       Créditos bancarios — <span id="creditosEmpresaLabel">Unveil</span>
     </p>
-    <div class="creditos-aviso-diseno">
-      Vista de diseño: lo que captures aquí todavía no se guarda — es para revisar cómo se ve y cómo se calculan los totales antes de conectarlo a la base de datos.
-    </div>
 
     <!-- PARTE A: Líneas de crédito -->
     <div class="sec-header-row">
@@ -8049,7 +8042,7 @@ async function initApp() {
   initTabsWH();
 
   // Inicializar "Créditos bancarios" (exclusivo UNVEIL y NMH Baja Sur —
-  // fase de diseño, ver entrarTabCreditos()/recalcularCreditosBancarios())
+  // guardado real en credito_lineas/credito_registros, ver entrarTabCreditos())
   initCreditosBancarios();
 
   // Inicializar módulo "Acumulado" (exclusivo WAREHOUSE RENTALS)
@@ -8893,11 +8886,6 @@ function entrarTabAcumulado() {
 // ═══════════════════════════════════════════════════
 // CRÉDITOS BANCARIOS (Unveil, NMH Baja Sur y Grupo Idirin)
 // ═══════════════════════════════════════════════════
-// FASE DE DISEÑO, a petición explícita: nada de esto tiene data-field,
-// así que attachEditableListeners()/onEdit() lo ignoran por completo —
-// no hay guardarCampo() ni sbRequest() en todo este bloque. Cuando se
-// confirme el diseño, aquí es donde se conecta el guardado real.
-//
 // Dos partes independientes, según el documento de referencia:
 //   A) Líneas de crédito — se crean una vez, casi no cambian. Ficha
 //      informativa (fecha de crédito, fecha de corte, fecha de pago,
@@ -8909,42 +8897,85 @@ function entrarTabAcumulado() {
 //        Total préstamo bancario = suma de los saldos de ese registro
 //        Deuda neta = Total − Efectivo disponible − Pago capital
 //
-// Grupo Idirin ya NO tiene su propia versión editable: solo arma un
-// espejo de solo lectura leyendo lineasCreditoPorEmpresa /
-// registrosMensualesPorEmpresa de unveil y warehouse_rentals.
+// Grupo Idirin no tiene su propia versión editable: arma un espejo
+// combinado leyendo lineasCreditoPorEmpresa / registrosMensualesPorEmpresa
+// de unveil y warehouse_rentals.
 //
-// IMPORTANTE: cada objeto guarda sus valores completos en memoria (no
-// solo el id) — así, al salir del tab de una empresa (o cambiar a la
-// otra) y volver, lo que se había escrito sigue ahí durante toda la
-// sesión del navegador (se pierde solo al recargar la página, ya que
-// nada de esto se manda a Supabase todavía).
+// PERSISTENCIA: viven en dos tablas propias de Supabase —
+// credito_lineas y credito_registros — en vez de balance_diario, porque
+// las líneas de crédito NO son mensuales (no tiene sentido atarlas a un
+// anio/mes: se crean una vez y valen para siempre). Cada objeto en
+// memoria (lineasCreditoPorEmpresa / registrosMensualesPorEmpresa) es la
+// copia de trabajo que edita la interfaz; toda edición se manda también
+// a Supabase con guardarLineaCredito()/guardarRegistroMensual(), y al
+// entrar al tab se recarga fresco con cargarCreditosDesdeSupabase().
 
-// ── Datos reales cargados del documento "CONTROL CRÉDITOS UV Y WH" ──
-// Estado actual (agosto 2026): líneas de crédito vigentes de cada
-// empresa + el registro mensual más reciente ya capturado (Agosto
-// 2026), con los mismos montos que el Excel de referencia. A partir
-// de aquí, cada mes nuevo se agrega con el botón "+" de "Registro
-// mensual" y queda apilado debajo — así se ve, mes con mes, cómo se
-// va restando el saldo de cada línea.
-let lineasCreditoPorEmpresa = {
-  unveil: [
-    { id: 'lc_uv_revolvente', nombre: 'Revolvente UV', monto: '$4,200,000.00', fechaCredito: '20/03/2024', fechaCorte: '02 de cada mes', fechaPago: '12 de cada mes', tasa: '', plazo: 'Renovación automática anual', clausula: 'Décima cuarta', terminacion: 'Solicitud por escrito — Vigésima quinta' },
-    { id: 'lc_uv_simple',     nombre: 'Crédito simple UV', monto: '$12,800,000.00', fechaCredito: '18/06/2026', fechaCorte: '', fechaPago: '02 de cada mes', tasa: '', plazo: '60 meses', clausula: '', terminacion: 'A plazo' },
-  ],
-  warehouse_rentals: [
-    { id: 'lc_wh_revolvente', nombre: 'Revolvente WH', monto: '$6,000,000.00', fechaCredito: '01/10/2025', fechaCorte: '02 de cada mes', fechaPago: '12 de cada mes', tasa: '', plazo: 'Renovación automática anual', clausula: 'Décima cuarta', terminacion: 'Solicitud por escrito — Vigésima quinta' },
-  ],
-};
+let lineasCreditoPorEmpresa = { unveil: [], warehouse_rentals: [] };
 // cada línea: { id, nombre, monto, fechaCredito, fechaCorte, fechaPago, tasa, plazo, clausula, terminacion }
-let registrosMensualesPorEmpresa = {
-  unveil: [
-    { id: 'rm_uv_ago2026', etiqueta: 'Agosto 2026', efectivo: '$1,822,405.92', pago: '$217,796.61', saldos: { lc_uv_revolvente: '$0.00', lc_uv_simple: '$12,850,000.00' } },
-  ],
-  warehouse_rentals: [
-    { id: 'rm_wh_ago2026', etiqueta: 'Agosto 2026', efectivo: '$1,822,405.92', pago: '$217,796.61', saldos: { lc_wh_revolvente: '$6,000,000.00' } },
-  ],
-};
+let registrosMensualesPorEmpresa = { unveil: [], warehouse_rentals: [] };
 // cada registro: { id, etiqueta, efectivo, pago, saldos: { [lineaId]: valorTexto } }
+
+// ── Persistencia (Supabase) ──
+function creditoLineaFilaDB(linea, empresaId, orden) {
+  return {
+    id: linea.id, empresa_id: empresaId,
+    nombre: linea.nombre || '', monto: linea.monto || '',
+    fecha_credito: linea.fechaCredito || '', fecha_corte: linea.fechaCorte || '', fecha_pago: linea.fechaPago || '',
+    tasa: linea.tasa || '', plazo: linea.plazo || '', clausula: linea.clausula || '', terminacion: linea.terminacion || '',
+    orden, actualizado_en: new Date().toISOString(),
+  };
+}
+async function guardarLineaCredito(linea) {
+  const orden = (lineasCreditoPorEmpresa[empresaActual] || []).findIndex(l => l.id === linea.id);
+  try {
+    await sbRequest('POST', '/rest/v1/credito_lineas?on_conflict=id', [creditoLineaFilaDB(linea, empresaActual, orden)]);
+    showStatus('✓ Guardado');
+  } catch(e) { console.error('guardarLineaCredito error:', e); showStatus('Error al guardar', true); }
+}
+async function eliminarLineaCreditoDB(id) {
+  try { await sbRequest('DELETE', `/rest/v1/credito_lineas?id=eq.${encodeURIComponent(id)}`); }
+  catch(e) { console.error('eliminarLineaCreditoDB error:', e); }
+}
+
+function creditoRegistroFilaDB(registro, empresaId, orden) {
+  return {
+    id: registro.id, empresa_id: empresaId, etiqueta: registro.etiqueta || '',
+    efectivo: registro.efectivo || '', pago: registro.pago || '', saldos: registro.saldos || {},
+    orden, actualizado_en: new Date().toISOString(),
+  };
+}
+async function guardarRegistroMensual(registro) {
+  const orden = (registrosMensualesPorEmpresa[empresaActual] || []).findIndex(r => r.id === registro.id);
+  try {
+    await sbRequest('POST', '/rest/v1/credito_registros?on_conflict=id', [creditoRegistroFilaDB(registro, empresaActual, orden)]);
+    showStatus('✓ Guardado');
+  } catch(e) { console.error('guardarRegistroMensual error:', e); showStatus('Error al guardar', true); }
+}
+async function eliminarRegistroMensualDB(id) {
+  try { await sbRequest('DELETE', `/rest/v1/credito_registros?id=eq.${encodeURIComponent(id)}`); }
+  catch(e) { console.error('eliminarRegistroMensualDB error:', e); }
+}
+
+// Trae fresco de Supabase lo que haya para UNA empresa y reemplaza su
+// copia en memoria — se llama al entrar al tab de esa empresa, y
+// también (para las dos empresas) al entrar al espejo de Grupo Idirin.
+async function cargarCreditosDesdeSupabase(empresaId) {
+  try {
+    const filas = await sbRequest('GET', `/rest/v1/credito_lineas?empresa_id=eq.${encodeURIComponent(empresaId)}&select=*&order=orden.asc`);
+    lineasCreditoPorEmpresa[empresaId] = (filas || []).map(r => ({
+      id: r.id, nombre: r.nombre || '', monto: r.monto || '',
+      fechaCredito: r.fecha_credito || '', fechaCorte: r.fecha_corte || '', fechaPago: r.fecha_pago || '',
+      tasa: r.tasa || '', plazo: r.plazo || '', clausula: r.clausula || '', terminacion: r.terminacion || '',
+    }));
+  } catch(e) { console.error('cargarCreditosDesdeSupabase (líneas) error:', e); }
+
+  try {
+    const filas = await sbRequest('GET', `/rest/v1/credito_registros?empresa_id=eq.${encodeURIComponent(empresaId)}&select=*&order=orden.asc`);
+    registrosMensualesPorEmpresa[empresaId] = (filas || []).map(r => ({
+      id: r.id, etiqueta: r.etiqueta || '', efectivo: r.efectivo || '', pago: r.pago || '', saldos: r.saldos || {},
+    }));
+  } catch(e) { console.error('cargarCreditosDesdeSupabase (registros) error:', e); }
+}
 
 // ═══ PARTE A: Líneas de crédito ═══
 
@@ -9002,6 +9033,12 @@ function crearLineaCredito(linea) {
       el.addEventListener('blur', () => {
         el.textContent = el.textContent.trim() ? formatMXN(parseMXN(el.textContent)) : '';
         linea.monto = el.textContent;
+        guardarLineaCredito(linea);
+      });
+    } else {
+      el.addEventListener('blur', () => {
+        linea[campo] = el.textContent;
+        guardarLineaCredito(linea);
       });
     }
     if (campo === 'nombre') {
@@ -9033,7 +9070,7 @@ function entrarParteLineasCredito() {
   if (vacio) vacio.style.display = lista.length ? 'none' : '';
 }
 
-function agregarLineaCredito() {
+async function agregarLineaCredito() {
   const id = 'lc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const linea = { id, nombre: '', monto: '', fechaCredito: '', fechaCorte: '', fechaPago: '', tasa: '', plazo: '', clausula: '', terminacion: '' };
   const lista = lineasCreditoPorEmpresa[empresaActual] || (lineasCreditoPorEmpresa[empresaActual] = []);
@@ -9055,9 +9092,11 @@ function agregarLineaCredito() {
     const registro = registros.find(r => r.id === regCard.dataset.registroId);
     if (registro) agregarColumnaSaldoARegistro(regCard, registro, id, '');
   });
+
+  await guardarLineaCredito(linea);
 }
 
-function quitarLineaCredito(id) {
+async function quitarLineaCredito(id) {
   const card = document.querySelector(`#lineasCreditoCont .credito-registro-card[data-linea-id="${id}"]`);
   if (card) card.remove();
   const lista = lineasCreditoPorEmpresa[empresaActual];
@@ -9067,16 +9106,24 @@ function quitarLineaCredito(id) {
   if (vacio && cont) vacio.style.display = cont.children.length ? 'none' : '';
 
   // Quita, en vivo, la columna de saldo de esta línea de cada registro
-  // mensual existente (memoria + DOM) y recalcula sus totales.
+  // mensual existente (memoria + DOM), recalcula sus totales, y
+  // re-guarda cada registro afectado (su columna "saldos" cambió).
   const registros = registrosMensualesPorEmpresa[empresaActual] || [];
+  const afectados = [];
   document.querySelectorAll('#registrosMensualesCont .credito-registro-card').forEach(regCard => {
     const celda = regCard.querySelector(`.creditos-campo-saldo[data-linea-id="${id}"]`);
     if (celda) celda.remove();
     const registro = registros.find(r => r.id === regCard.dataset.registroId);
-    if (registro && registro.saldos) delete registro.saldos[id];
+    if (registro && registro.saldos && registro.saldos[id] !== undefined) {
+      delete registro.saldos[id];
+      afectados.push(registro);
+    }
     if (registro) recalcularRegistroMensual(regCard, registro);
   });
   renderSeguimientoCreditoActual();
+
+  await eliminarLineaCreditoDB(id);
+  await Promise.all(afectados.map(r => guardarRegistroMensual(r)));
 }
 
 function initLineasCredito() {
@@ -9120,6 +9167,7 @@ function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
     valorEl.textContent = formatMXN(parseMXN(valorEl.textContent));
     registro.saldos[lineaId] = valorEl.textContent;
     recalcularRegistroMensual(card, registro);
+    guardarRegistroMensual(registro);
   });
 }
 
@@ -9153,6 +9201,10 @@ function crearRegistroMensual(registro) {
   card.querySelector('.credito-registro-etiqueta').addEventListener('input', function() {
     registro.etiqueta = this.textContent;
   });
+  card.querySelector('.credito-registro-etiqueta').addEventListener('blur', function() {
+    registro.etiqueta = this.textContent;
+    guardarRegistroMensual(registro);
+  });
 
   // Una columna de saldo por cada línea de crédito ACTUALMENTE activa
   // en esta empresa — se insertan antes de "Total préstamo bancario".
@@ -9174,6 +9226,7 @@ function crearRegistroMensual(registro) {
       el.textContent = formatMXN(parseMXN(el.textContent));
       registro[campo] = el.textContent;
       recalcularRegistroMensual(card, registro);
+      guardarRegistroMensual(registro);
     });
   });
 
@@ -9215,7 +9268,7 @@ function entrarParteRegistrosMensuales() {
   if (vacio) vacio.style.display = lista.length ? 'none' : '';
 }
 
-function agregarRegistroMensual() {
+async function agregarRegistroMensual() {
   const id = 'rm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
 
@@ -9245,15 +9298,19 @@ function agregarRegistroMensual() {
   const primerCampo = card.querySelector('.credito-registro-etiqueta');
   if (primerCampo) primerCampo.focus();
   renderSeguimientoCreditoActual();
+
+  await guardarRegistroMensual(registro);
 }
 
-function quitarRegistroMensual(id) {
+async function quitarRegistroMensual(id) {
   const lista = registrosMensualesPorEmpresa[empresaActual];
   if (lista) registrosMensualesPorEmpresa[empresaActual] = lista.filter(r => r.id !== id);
   // Se reconstruye toda la parte B para que las flechitas de "vs. mes
   // anterior" queden correctas al recalcular la cadena de registros.
   entrarParteRegistrosMensuales();
   renderSeguimientoCreditoActual();
+
+  await eliminarRegistroMensualDB(id);
 }
 
 function initRegistrosMensuales() {
@@ -9262,10 +9319,15 @@ function initRegistrosMensuales() {
 }
 
 // ── Punto de entrada del tab (Unveil / WH) ──
-function entrarTabCreditos() {
+async function entrarTabCreditos() {
   const nombreCorto = empresaActual === 'unveil' ? 'Unveil' : 'NMH Baja Sur';
   const lbl = document.getElementById('creditosEmpresaLabel');
   if (lbl) lbl.textContent = nombreCorto;
+
+  // Mientras carga, deja ver lo último que hubiera en memoria (si venías
+  // de otra pestaña de esta misma empresa) en vez de parpadear a vacío.
+  await cargarCreditosDesdeSupabase(empresaActual);
+
   entrarParteLineasCredito();
   entrarParteRegistrosMensuales();
   renderSeguimientoCreditoActual();
@@ -9424,9 +9486,11 @@ function creditosInfoFijaHTML(columnas) {
 // se va abonando/restando mes con mes en ambas empresas a la vez.
 // Debajo va la "información fija" (amarillo) y el seguimiento de cada
 // empresa por separado — misma función que usa el tab individual.
-function entrarTabCreditosGrupo() {
+async function entrarTabCreditosGrupo() {
   const cont = document.getElementById('creditosGrpEspejoCont');
   if (!cont) return;
+
+  await Promise.all(CREDITOS_GRP_EMPRESAS.map(emp => cargarCreditosDesdeSupabase(emp.id)));
 
   const columnas  = creditosGrpColumnas();
   const etiquetas = creditosGrpEtiquetas();
@@ -9507,7 +9571,6 @@ function entrarTabCreditosGrupo() {
         </tbody>
       </table>
     </div>
-    <p class="creditos-parte-nota" style="margin-top:10px">Efectivo disponible y Pago capital son el mismo movimiento reflejado en ambas empresas — se cuentan una sola vez por mes, no se suman.</p>
     ${creditosInfoFijaHTML(columnas)}
     ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.nombre} — seguimiento mes a mes`)).join('')}`;
 }
