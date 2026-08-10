@@ -1262,6 +1262,22 @@
   body.modo-vista-acotada #creditoSeccionHeader,
   body.modo-vista-acotada #creditoTarjetasCont { display: none !important; }
 
+  /* Único caso especial dentro de vista-acotada: el rol "patricio" es
+     igual que "especial" en todo (mismas empresas permitidas, mismas
+     restricciones de arriba) EXCEPTO que sí puede ver "Desglose" en
+     todas sus empresas. Misma especificidad que la regla de arriba
+     (body + 1 clase + 1 id) — al ir después en el CSS, gana para
+     "modo-patricio" sin tener que tocar la regla general. */
+  body.modo-patricio #desgloseCardFlujo,
+  body.modo-patricio #desgloseCardVenta { display: block !important; }
+  /* Sigue siendo de solo lectura — la tarjeta se ve, pero ni el botón
+     de Pagado/Pendiente ni el de quitar (×) funcionan (el "+" y el
+     texto ya quedan bloqueados por las reglas generales de arriba,
+     .btn-add-circular y [contenteditable], que si cubren estas dos
+     clases). */
+  body.modo-patricio .desglose-remove { display: none !important; }
+  body.modo-patricio .desglose-pagado-btn { pointer-events: none !important; cursor: default !important; }
+
   /* ══════════════════════════════════════════
      FIN LOGIN
   ══════════════════════════════════════════ */
@@ -5473,6 +5489,7 @@ async function cerrarSesion() {
 // restricción de empresas: ve las 6 normalmente.
 const EMPRESAS_PERMITIDAS_POR_ROL = {
   especial: ['grupo_idirin', 'unveil', 'warehouse_rentals'],
+  patricio: ['grupo_idirin', 'unveil', 'warehouse_rentals'],
   wh:       ['grupo_idirin', 'warehouse_rentals'],
   is:       ['grupo_idirin', 'idirin_sobera'],
   mi:       ['grupo_idirin', 'unveil'],
@@ -5482,7 +5499,7 @@ const EMPRESAS_PERMITIDAS_POR_ROL = {
 // Roles que NUNCA pueden editar nada (solo lectura, con distintos
 // niveles de qué pueden VER). Se usa tanto para el bloqueo estructural
 // de guardado como para el CSS.
-const ROLES_SOLO_LECTURA = ['lector', 'user', 'especial', 'wh', 'is', 'mi', 'bc', 'editor'];
+const ROLES_SOLO_LECTURA = ['lector', 'user', 'especial', 'patricio', 'wh', 'is', 'mi', 'bc', 'editor'];
 function esRolSoloLectura(rol) {
   return ROLES_SOLO_LECTURA.includes(rol);
 }
@@ -5508,14 +5525,20 @@ function aplicarRol(rol) {
   // poder editar nada. Única diferencia con lector: no ve el tab
   // "Saldos" en ninguna empresa.
   document.body.classList.toggle('modo-user', rol === 'user');
-  // modo-especial / modo-wh / modo-is / modo-mi / modo-bc: cada uno solo ve el
-  // Dashboard (Grupo Idirin) y su(s) empresa(s) correspondiente(s) (ver
-  // EMPRESAS_PERMITIDAS_POR_ROL), y dentro de Balance Mensual solo
-  // "Avance hacia la meta mensual" y "Resumen de posición" — nada de
-  // Notas, Ingresos imprevistos, Traspasos, Plan de ataque ni Situación
-  // de crédito. Tampoco pueden editar nada. Comparten exactamente las
-  // mismas reglas de CSS a través de la clase común "modo-vista-acotada".
+  // modo-especial / modo-patricio / modo-wh / modo-is / modo-mi / modo-bc:
+  // cada uno solo ve el Dashboard (Grupo Idirin) y su(s) empresa(s)
+  // correspondiente(s) (ver EMPRESAS_PERMITIDAS_POR_ROL), y dentro de
+  // Balance Mensual solo "Avance hacia la meta mensual" y "Resumen de
+  // posición" — nada de Notas, Ingresos imprevistos, Traspasos, Plan de
+  // ataque ni Situación de crédito. Tampoco pueden editar nada. Comparten
+  // exactamente las mismas reglas de CSS a través de la clase común
+  // "modo-vista-acotada". ÚNICA diferencia de "modo-patricio" respecto a
+  // "modo-especial" (mismas empresas permitidas, mismo todo lo demás):
+  // SÍ ve la tarjeta "Desglose" en todas sus empresas — ver el override
+  // puntual en el CSS, justo debajo del bloque general de
+  // modo-vista-acotada.
   document.body.classList.toggle('modo-especial', rol === 'especial');
+  document.body.classList.toggle('modo-patricio', rol === 'patricio');
   document.body.classList.toggle('modo-wh', rol === 'wh');
   document.body.classList.toggle('modo-is', rol === 'is');
   document.body.classList.toggle('modo-mi', rol === 'mi');
