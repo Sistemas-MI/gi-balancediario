@@ -1243,12 +1243,32 @@
   body.modo-vista-acotada #tabGrupoCreditos { display: none !important; }
 
   /* Excepción puntual: el rol "especial" sí puede ver el tab "Créditos"
-     en Unveil y en Warehouse Rentals (nmh_baja_sur) — el resto de las
-     restricciones de vista-acotada de arriba se mantienen igual. Misma
-     especificidad que la regla general (body + 1 clase + 1 id); al ir
-     después en el CSS, gana para "modo-especial" sin tocar esa regla. */
+     en Unveil, en Warehouse Rentals (nmh_baja_sur) y en el dashboard de
+     Grupo Idirin — el resto de las restricciones de vista-acotada de
+     arriba se mantienen igual. Misma especificidad que la regla general
+     (body + 1 clase + 1 id); al ir después en el CSS, gana para
+     "modo-especial" sin tocar esa regla. */
   body.modo-especial #tabUnveilCreditos,
-  body.modo-especial #tabGenericoCreditos { display: inline-block !important; }
+  body.modo-especial #tabGenericoCreditos,
+  body.modo-especial #tabGrupoCreditos { display: inline-block !important; }
+
+  /* Además, dentro de Créditos: el rol "especial" sí puede crear y
+     editar "Registro mensual" (Parte B) — "Líneas de crédito" (Parte A)
+     se queda de solo lectura para este rol, igual que el resto de
+     vista-acotada. Mismo criterio de especificidad que arriba: mismo
+     selector base que la regla general, va después → gana. */
+  body.modo-especial #btnAgregarRegistroMensual {
+    display: flex !important;
+    pointer-events: auto !important;
+  }
+  body.modo-especial #registrosMensualesCont [contenteditable] {
+    pointer-events: auto !important;
+    cursor: text !important;
+    -webkit-user-modify: read-write !important;
+  }
+  body.modo-especial #registrosMensualesCont [contenteditable]:focus {
+    background: rgba(92,46,26,.05) !important;
+  }
 
   /* Botones de UI que no aplican para estos roles */
   body.modo-vista-acotada .btn-cerrar-mes,
