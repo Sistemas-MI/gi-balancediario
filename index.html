@@ -9572,7 +9572,7 @@ async function entrarTabCreditosGrupo() {
       </table>
     </div>
     ${creditosInfoFijaHTML(columnas)}
-    ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.nombre} — seguimiento mes a mes`)).join('')}`;
+    ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.id === 'warehouse_rentals' ? 'WH' : emp.nombre} — seguimiento mes a mes`)).join('')}`;
 }
 function initTabsWH() {
   const tabBalance   = document.getElementById('tabWHBalance');
