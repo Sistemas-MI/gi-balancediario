@@ -9326,21 +9326,39 @@ function entrarParteRegistrosMensuales() {
 async function agregarRegistroMensual() {
   const id = 'rm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
+  const anterior = lista.length ? lista[lista.length - 1] : null;
 
   // El nuevo registro arranca con Efectivo disponible y cada saldo de
   // línea en $0.00 — el usuario captura cada valor a mano cada mes.
-  // Único campo con valor por defecto distinto: Pago capital, que es
-  // fijo. Se usa formatMXN(0) para que el formato sea idéntico al que
-  // se aplica en cualquier otro campo de moneda del sistema.
   const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
   const saldos = {};
   lineas.forEach(l => { saldos[l.id] = formatMXN(0); });
+
+  // Pago capital es un monto FIJO que se repite mes a mes (no algo que
+  // deba cambiar solo) — se copia tal cual del registro anterior. Antes
+  // aquí había un valor escrito a mano por error; ahora sí sale del
+  // registro real más reciente (editable si algún mes sí cambia).
+  const pagoInicial = anterior ? (anterior.pago || formatMXN(0)) : formatMXN(0);
+
+  // La "Deuda neta" del registro anterior se copia como saldo inicial
+  // de la línea "Crédito simple UV" (sigue siendo editable) — es lo que
+  // realmente queda pendiente después de aplicar efectivo/pago del mes
+  // pasado, y a partir de ahí sigue bajando conforme se va abonando.
+  if (anterior) {
+    const lineaSimple = lineas.find(l => (l.nombre || '').trim().toLowerCase() === 'crédito simple uv');
+    if (lineaSimple) {
+      const valoresAnterior = lineas.map(l => (anterior.saldos && anterior.saldos[l.id] !== undefined) ? parseMXN(anterior.saldos[l.id]) : 0);
+      const totalAnterior  = valoresAnterior.reduce((s, v) => s + v, 0);
+      const deudaAnterior  = totalAnterior - parseMXN(anterior.efectivo) - parseMXN(anterior.pago);
+      saldos[lineaSimple.id] = formatMXN(deudaAnterior);
+    }
+  }
 
   const registro = {
     id,
     etiqueta: '',
     efectivo: formatMXN(0),
-    pago: '$217,895.61',
+    pago: pagoInicial,
     saldos,
   };
   lista.push(registro);
@@ -9463,11 +9481,13 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
     const valores = valoresDeFila(f);
     const total   = valores.reduce((s, v) => s + (v || 0), 0);
     const deuda   = deudaDeFila(f, valores);
+    const pagoCapital = f.esReg ? parseMXN(f.registro.pago) : null;
     return `
       <tr>
         <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
         ${valores.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
         <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>
+        <td>${pagoCapital === null ? '—' : escapeHTML(formatMXN(pagoCapital))}</td>
         <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
       </tr>`;
   }).join('');
@@ -9481,6 +9501,7 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
             <th class="grp-acum-matrix-empresa">Mes</th>
             ${lineasEmp.map(l => `<th>${escapeHTML(l.nombre || 'Línea')}</th>`).join('')}
             <th>Total préstamo</th>
+            <th>Pago capital</th>
             <th>Deuda neta pendiente</th>
           </tr>
         </thead>
