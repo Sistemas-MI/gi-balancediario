@@ -200,9 +200,9 @@
   body.modo-ventas #tabUnveilCreditos,
   body.modo-ventas #tabWHGastos,
   body.modo-ventas #tabWHSaldos,
-  body.modo-ventas #tabWHCreditos,
   body.modo-ventas #tabGenericoGastos,
-  body.modo-ventas #tabGenericoSaldos { display: none !important; }
+  body.modo-ventas #tabGenericoSaldos,
+  body.modo-ventas #tabGenericoCreditos { display: none !important; }
 
   /* La barra de Grupo Idirin se deja solo con Este mes / Histórico /
      Acumulado — "Saldos" queda oculto para todos por ahora (el panel y
@@ -1122,9 +1122,9 @@
      botón es exclusivo de admin y lector */
   body.modo-editor #tabWHSaldos,
   body.modo-editor #tabUnveilSaldos,
-  body.modo-editor #tabWHCreditos,
   body.modo-editor #tabUnveilCreditos,
   body.modo-editor #tabGenericoSaldos,
+  body.modo-editor #tabGenericoCreditos,
   body.modo-editor #tabGrupoSaldos,
   body.modo-editor #tabGrupoCreditos { display: none !important; }
 
@@ -1178,9 +1178,9 @@
      es exclusivo de admin y lector */
   body.modo-user #tabWHSaldos,
   body.modo-user #tabUnveilSaldos,
-  body.modo-user #tabWHCreditos,
   body.modo-user #tabUnveilCreditos,
   body.modo-user #tabGenericoSaldos,
+  body.modo-user #tabGenericoCreditos,
   body.modo-user #tabGrupoSaldos,
   body.modo-user #tabGrupoCreditos { display: none !important; }
 
@@ -1229,7 +1229,6 @@
   body.modo-vista-acotada #tabWHAcumulado,
   body.modo-vista-acotada #tabWHGastos,
   body.modo-vista-acotada #tabWHSaldos,
-  body.modo-vista-acotada #tabWHCreditos,
   body.modo-vista-acotada #tabUnveilEventos,
   body.modo-vista-acotada #tabUnveilAcumulado,
   body.modo-vista-acotada #tabUnveilGastos,
@@ -1238,9 +1237,18 @@
   body.modo-vista-acotada #tabGenericoAcumulado,
   body.modo-vista-acotada #tabGenericoGastos,
   body.modo-vista-acotada #tabGenericoSaldos,
+  body.modo-vista-acotada #tabGenericoCreditos,
   body.modo-vista-acotada #tabGrupoAcumulado,
   body.modo-vista-acotada #tabGrupoSaldos,
   body.modo-vista-acotada #tabGrupoCreditos { display: none !important; }
+
+  /* Excepción puntual: el rol "especial" sí puede ver el tab "Créditos"
+     en Unveil y en Warehouse Rentals (nmh_baja_sur) — el resto de las
+     restricciones de vista-acotada de arriba se mantienen igual. Misma
+     especificidad que la regla general (body + 1 clase + 1 id); al ir
+     después en el CSS, gana para "modo-especial" sin tocar esa regla. */
+  body.modo-especial #tabUnveilCreditos,
+  body.modo-especial #tabGenericoCreditos { display: inline-block !important; }
 
   /* Botones de UI que no aplican para estos roles */
   body.modo-vista-acotada .btn-cerrar-mes,
@@ -4369,22 +4377,28 @@
     <button class="dash-tab" type="button" id="tabUnveilCreditos">Créditos</button>
   </div>
 
-  <!-- TABS exclusivos de WAREHOUSE RENTALS: Balance Mensual / Cobrado por Vendedor / Acumulado / Gastos / Saldos -->
+  <!-- TABS exclusivos de WAREHOUSE RENTALS (nmh_baja_sur, atención: mismo
+       nombre visual que la empresa de abajo pero es un id DISTINTO — ver
+       nota en cambiarEmpresa()): Balance Mensual / Cobrado por Vendedor /
+       Acumulado / Gastos / Saldos -->
   <div class="dash-tabs" id="whTabsWrap" style="display:none">
     <button class="dash-tab active" type="button" id="tabWHBalance">Balance Mensual</button>
     <button class="dash-tab" type="button" id="tabWHVendedores">Vendedores</button>
     <button class="dash-tab" type="button" id="tabWHAcumulado">Acumulado</button>
     <button class="dash-tab" type="button" id="tabWHGastos">Gastos</button>
     <button class="dash-tab" type="button" id="tabWHSaldos">Saldos</button>
-    <button class="dash-tab" type="button" id="tabWHCreditos">Créditos</button>
   </div>
 
-  <!-- TABS genéricos: para empresas sin tabs propios (Idirin Sobera, NMH Baja Sur, Bacari Studio) -->
+  <!-- TABS genéricos: para empresas sin tabs propios (Idirin Sobera,
+       Warehouse Rentals, Bacari Studio). "Créditos" SOLO se muestra para
+       Warehouse Rentals (empresa_id 'nmh_baja_sur') — se decide en
+       cambiarEmpresa()/actualizarEmpresaUI(), no aquí. -->
   <div class="dash-tabs" id="genericTabsWrap" style="display:none">
     <button class="dash-tab active" type="button" id="tabGenericoBalance">Balance Mensual</button>
     <button class="dash-tab" type="button" id="tabGenericoAcumulado">Acumulado</button>
     <button class="dash-tab" type="button" id="tabGenericoGastos">Gastos</button>
     <button class="dash-tab" type="button" id="tabGenericoSaldos">Saldos</button>
+    <button class="dash-tab" type="button" id="tabGenericoCreditos" style="display:none">Créditos</button>
   </div>
 
   <div id="panelBalanceEmpresa">
@@ -5488,7 +5502,11 @@ async function cerrarSesion() {
 // Cualquier rol que NO aparezca aquí (admin, lector, user) no tiene
 // restricción de empresas: ve las 6 normalmente.
 const EMPRESAS_PERMITIDAS_POR_ROL = {
-  especial: ['grupo_idirin', 'unveil', 'warehouse_rentals'],
+  // 'warehouse_rentals' y 'nmh_baja_sur' son dos empresas DISTINTAS con
+  // nombres visuales cruzados (warehouse_rentals se muestra como "NMH
+  // Baja Sur"; nmh_baja_sur se muestra como "Warehouse Rentals" — ver
+  // el <select> de empresas). "especial" ve las dos a propósito.
+  especial: ['grupo_idirin', 'unveil', 'warehouse_rentals', 'nmh_baja_sur'],
   patricio: ['grupo_idirin', 'unveil', 'warehouse_rentals'],
   wh:       ['grupo_idirin', 'warehouse_rentals'],
   is:       ['grupo_idirin', 'idirin_sobera'],
@@ -7722,12 +7740,19 @@ async function cambiarEmpresa(empresa_id) {
   // con el bloque fijo de vendedores, ahora evitado de raíz).
   const esUnveil = empresa_id === 'unveil';
   const esWH     = empresa_id === 'warehouse_rentals';
+  // "Warehouse Rentals" en pantalla es el id 'nmh_baja_sur' (los nombres
+  // visuales de estas dos empresas están cruzados respecto a sus ids
+  // desde antes — ver EMPRESAS_PERMITIDAS_POR_ROL / el <select> de
+  // empresas). "Créditos" vive aquí, no en 'warehouse_rentals'.
+  const esNMHBajaSur = empresa_id === 'nmh_baja_sur';
   const esGenerico = !esUnveil && !esWH && empresa_id !== 'grupo_idirin';
   if (empresa_id !== 'grupo_idirin') {
     document.getElementById('unveilTabsWrap').style.display  = esUnveil   ? '' : 'none';
     document.getElementById('whTabsWrap').style.display      = esWH       ? '' : 'none';
     document.getElementById('genericTabsWrap').style.display = esGenerico ? '' : 'none';
   }
+  const tabGenericoCreditosEl = document.getElementById('tabGenericoCreditos');
+  if (tabGenericoCreditosEl) tabGenericoCreditosEl.style.display = esNMHBajaSur ? '' : 'none';
 
   // BALANCE DE VENTAS: el modo persiste al cambiar de empresa (incluido
   // el dashboard de Grupo Idirin, que ahora también lo soporta) — solo
@@ -7749,6 +7774,14 @@ async function cambiarEmpresa(empresa_id) {
   // funciones de tab decidan cuál mostrar.
   if (!esUnveil) document.getElementById('panelEventosUnveil').style.display = 'none';
   if (!esWH)     document.getElementById('panelVendedoresWH').style.display  = 'none';
+  // "Créditos" (panelCreditosBancarios) vive en Unveil y en Warehouse
+  // Rentals (nmh_baja_sur) — se oculta explícitamente para cualquier
+  // otra empresa, por la misma razón de arriba (si no, se quedaba
+  // "pegado" visible al fondo de Balance Mensual al cambiar de empresa).
+  if (!esUnveil && !esNMHBajaSur) {
+    const panelCreditosEl = document.getElementById('panelCreditosBancarios');
+    if (panelCreditosEl) panelCreditosEl.style.display = 'none';
+  }
   // Siempre ocultar Acumulado y Gastos al cambiar de empresa/tab — ambos
   // son compartidos por todas las empresas (excl. Grupo Idirin) y se
   // mostrarán solo si el usuario hace clic en su tab correspondiente.
@@ -8816,13 +8849,11 @@ function cambiarTabWH(tab) {
   const esAcumulado = tab === 'acumulado';
   const esGastos    = tab === 'gastos';
   const esSaldos    = tab === 'saldos';
-  const esCreditos  = tab === 'creditos';
   const tabBalance   = document.getElementById('tabWHBalance');
   const tabVend      = document.getElementById('tabWHVendedores');
   const tabAcumulado = document.getElementById('tabWHAcumulado');
   const tabGastos    = document.getElementById('tabWHGastos');
   const tabSaldos    = document.getElementById('tabWHSaldos');
-  const tabCreditos  = document.getElementById('tabWHCreditos');
   if (!tabBalance || !tabVend) return;
 
   tabBalance.classList.toggle('active', esBalance);
@@ -8830,7 +8861,6 @@ function cambiarTabWH(tab) {
   if (tabAcumulado) tabAcumulado.classList.toggle('active', esAcumulado);
   if (tabGastos) tabGastos.classList.toggle('active', esGastos);
   if (tabSaldos) tabSaldos.classList.toggle('active', esSaldos);
-  if (tabCreditos) tabCreditos.classList.toggle('active', esCreditos);
 
   document.getElementById('panelBalanceEmpresa').style.display = esBalance   ? '' : 'none';
   document.getElementById('panelVendedoresWH').style.display   = esVend      ? '' : 'none';
@@ -8839,8 +8869,11 @@ function cambiarTabWH(tab) {
   document.getElementById('panelGastos').style.display         = esGastos    ? '' : 'none';
   const panelSaldos = document.getElementById('panelSaldos');
   if (panelSaldos) panelSaldos.style.display = esSaldos ? '' : 'none';
+  // "Créditos" ya NO vive en esta empresa (warehouse_rentals) — se movió
+  // a Warehouse Rentals (empresa_id nmh_baja_sur, tabs genéricos). Se
+  // fuerza oculto aquí por si quedó visible de una vista anterior.
   const panelCreditos = document.getElementById('panelCreditosBancarios');
-  if (panelCreditos) panelCreditos.style.display = esCreditos ? '' : 'none';
+  if (panelCreditos) panelCreditos.style.display = 'none';
 
   if (esVend) {
     // Repintar el grid completo (no solo las barras) cada vez que se
@@ -8858,7 +8891,6 @@ function cambiarTabWH(tab) {
   if (esGastos) {
     actualizarBarrasGastos();
   }
-  if (esCreditos) entrarTabCreditos();
 }
 
 // ── Lógica de "acabo de entrar al tab Acumulado", compartida por los 3
@@ -8922,7 +8954,7 @@ function entrarTabAcumulado() {
 //
 // Grupo Idirin no tiene su propia versión editable: arma un espejo
 // combinado leyendo lineasCreditoPorEmpresa / registrosMensualesPorEmpresa
-// de unveil y warehouse_rentals.
+// de unveil y nmh_baja_sur (Warehouse Rentals).
 //
 // PERSISTENCIA: viven en dos tablas propias de Supabase —
 // credito_lineas y credito_registros — en vez de balance_diario, porque
@@ -8933,9 +8965,9 @@ function entrarTabAcumulado() {
 // a Supabase con guardarLineaCredito()/guardarRegistroMensual(), y al
 // entrar al tab se recarga fresco con cargarCreditosDesdeSupabase().
 
-let lineasCreditoPorEmpresa = { unveil: [], warehouse_rentals: [] };
+let lineasCreditoPorEmpresa = { unveil: [], nmh_baja_sur: [] };
 // cada línea: { id, nombre, monto, fechaCredito, fechaCorte, fechaPago, tasa, plazo, clausula, terminacion }
-let registrosMensualesPorEmpresa = { unveil: [], warehouse_rentals: [] };
+let registrosMensualesPorEmpresa = { unveil: [], nmh_baja_sur: [] };
 // cada registro: { id, etiqueta, efectivo, pago, saldos: { [lineaId]: valorTexto } }
 
 // ── Persistencia (Supabase) ──
@@ -9343,7 +9375,7 @@ function initRegistrosMensuales() {
 
 // ── Punto de entrada del tab (Unveil / WH) ──
 async function entrarTabCreditos() {
-  const nombreCorto = empresaActual === 'unveil' ? 'Unveil' : 'NMH Baja Sur';
+  const nombreCorto = empresaActual === 'unveil' ? 'Unveil' : 'Warehouse Rentals';
   const lbl = document.getElementById('creditosEmpresaLabel');
   if (lbl) lbl.textContent = nombreCorto;
 
@@ -9370,7 +9402,7 @@ function initCreditosBancarios() {
 // veces.
 const CREDITOS_GRP_EMPRESAS = [
   { id: 'unveil', nombre: 'Unveil' },
-  { id: 'warehouse_rentals', nombre: 'NMH Baja Sur' },
+  { id: 'nmh_baja_sur', nombre: 'Warehouse Rentals' },
 ];
 
 // Columnas (líneas de crédito) en el orden del Excel: primero las
@@ -9595,7 +9627,7 @@ async function entrarTabCreditosGrupo() {
       </table>
     </div>
     ${creditosInfoFijaHTML(columnas)}
-    ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.id === 'warehouse_rentals' ? 'WH' : emp.nombre} — seguimiento mes a mes`)).join('')}`;
+    ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.id === 'nmh_baja_sur' ? 'WH' : emp.nombre} — seguimiento mes a mes`)).join('')}`;
 }
 function initTabsWH() {
   const tabBalance   = document.getElementById('tabWHBalance');
@@ -9603,14 +9635,12 @@ function initTabsWH() {
   const tabAcumulado = document.getElementById('tabWHAcumulado');
   const tabGastos    = document.getElementById('tabWHGastos');
   const tabSaldos    = document.getElementById('tabWHSaldos');
-  const tabCreditos  = document.getElementById('tabWHCreditos');
   if (!tabBalance || !tabVend) return;
   tabBalance.addEventListener('click', () => cambiarTabWH('balance'));
   tabVend.addEventListener('click', () => cambiarTabWH('vendedores'));
   if (tabAcumulado) tabAcumulado.addEventListener('click', () => cambiarTabWH('acumulado'));
   if (tabGastos) tabGastos.addEventListener('click', () => cambiarTabWH('gastos'));
   if (tabSaldos) tabSaldos.addEventListener('click', () => cambiarTabWH('saldos'));
-  if (tabCreditos) tabCreditos.addEventListener('click', () => cambiarTabWH('creditos'));
 }
 
 // Renderiza las tarjetas de vendedores con los datos actuales
@@ -11529,16 +11559,19 @@ function cambiarTabGenerico(tab) {
   const esAcumulado = tab === 'acumulado';
   const esGastos    = tab === 'gastos';
   const esSaldos    = tab === 'saldos';
+  const esCreditos  = tab === 'creditos';
   const tabBalance   = document.getElementById('tabGenericoBalance');
   const tabAcumulado = document.getElementById('tabGenericoAcumulado');
   const tabGastos     = document.getElementById('tabGenericoGastos');
   const tabSaldos     = document.getElementById('tabGenericoSaldos');
+  const tabCreditos   = document.getElementById('tabGenericoCreditos');
   if (!tabBalance) return;
 
   tabBalance.classList.toggle('active', esBalance);
   if (tabAcumulado) tabAcumulado.classList.toggle('active', esAcumulado);
   if (tabGastos) tabGastos.classList.toggle('active', esGastos);
   if (tabSaldos) tabSaldos.classList.toggle('active', esSaldos);
+  if (tabCreditos) tabCreditos.classList.toggle('active', esCreditos);
 
   document.getElementById('panelBalanceEmpresa').style.display = esBalance   ? '' : 'none';
   const panelAcum = document.getElementById('panelWHAcumulado');
@@ -11546,9 +11579,12 @@ function cambiarTabGenerico(tab) {
   document.getElementById('panelGastos').style.display         = esGastos    ? '' : 'none';
   const panelSaldos = document.getElementById('panelSaldos');
   if (panelSaldos) panelSaldos.style.display = esSaldos ? '' : 'none';
+  const panelCreditos = document.getElementById('panelCreditosBancarios');
+  if (panelCreditos) panelCreditos.style.display = esCreditos ? '' : 'none';
 
   if (esAcumulado) entrarTabAcumulado();
   if (esGastos) actualizarBarrasGastos();
+  if (esCreditos) entrarTabCreditos();
 }
 
 function initTabsGenerico() {
@@ -11556,11 +11592,13 @@ function initTabsGenerico() {
   const tabAcumulado = document.getElementById('tabGenericoAcumulado');
   const tabGastos     = document.getElementById('tabGenericoGastos');
   const tabSaldos     = document.getElementById('tabGenericoSaldos');
+  const tabCreditos   = document.getElementById('tabGenericoCreditos');
   if (!tabBalance) return;
   tabBalance.addEventListener('click', () => cambiarTabGenerico('balance'));
   if (tabAcumulado) tabAcumulado.addEventListener('click', () => cambiarTabGenerico('acumulado'));
   if (tabGastos) tabGastos.addEventListener('click', () => cambiarTabGenerico('gastos'));
   if (tabSaldos) tabSaldos.addEventListener('click', () => cambiarTabGenerico('saldos'));
+  if (tabCreditos) tabCreditos.addEventListener('click', () => cambiarTabGenerico('creditos'));
 }
 
 </script>
