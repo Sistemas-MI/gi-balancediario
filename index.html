@@ -1290,6 +1290,22 @@
     display: flex !important;
     pointer-events: auto !important;
   }
+  /* Esto era lo que faltaba: aunque el campo ya tuviera
+     contenteditable="true" por dentro (ver actualizarEditabilidadGlobal
+     / debeBloquearSaldos), la regla general de arriba
+     (body.modo-vista-acotada [contenteditable]) igual le pone
+     pointer-events:none — el atributo [contenteditable] se selecciona
+     por PRESENCIA, no por su valor, así que aplicaba sin importar que
+     dijera "true". Sin esto, el clic simplemente no hacía nada. */
+  body.modo-especial #panelSaldos [contenteditable] {
+    pointer-events: auto !important;
+    cursor: text !important;
+    outline: none !important;
+    -webkit-user-modify: read-write !important;
+  }
+  body.modo-especial #panelSaldos [contenteditable]:focus {
+    background: rgba(92,46,26,.05) !important;
+  }
 
   /* Botones de UI que no aplican para estos roles */
   body.modo-vista-acotada .btn-cerrar-mes,
