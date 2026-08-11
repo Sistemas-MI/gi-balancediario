@@ -3143,6 +3143,14 @@
     pointer-events: none !important;
     cursor: default !important;
   }
+  /* El "select" de Moneda tiene su propia regla aparte (arriba) que
+     también le quita el clic — no la cubre la regla de [contenteditable]
+     de más abajo porque un <select> no es contenteditable. Mismo
+     motivo, misma excepción puntual para "especial". */
+  body.modo-especial #panelSaldos select.saldos-col-moneda {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
   .saldos-col-cuenta  { width: 140px; flex: 0 0 140px; color: var(--suave); }
   .saldos-col-dolares {
     width: 122px; flex: 0 0 122px; text-align: right;
