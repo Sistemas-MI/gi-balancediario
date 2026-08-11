@@ -7176,7 +7176,9 @@ async function onEditSelectMoneda(id, fila) {
   const mesHoy  = HOY.getMonth() + 1;
   const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
   if (esMesPasado) return;
-  if (sesionUsuario && esRolSoloLectura(sesionUsuario.rol)) return;
+  // Misma excepción que onEdit(): "especial" sí puede guardar Saldos.
+  const esEspecialMoneda = sesionUsuario && sesionUsuario.rol === 'especial';
+  if (sesionUsuario && esRolSoloLectura(sesionUsuario.rol) && !esEspecialMoneda) return;
 
   recalcularSaldoFila(fila);
   const sel = fila.querySelector('.saldos-col-moneda');
@@ -7939,7 +7941,15 @@ function onEdit(campo) {
   // este corte garantiza que incluso si el evento 'input' se disparara
   // por algún medio alternativo (teclado, devtools, script externo),
   // nunca llegue a guardar nada en Supabase.
-  if (sesionUsuario && esRolSoloLectura(sesionUsuario.rol)) return;
+  //
+  // Excepción explícita: campos de Saldos (saldo_*/saldos_*) sí se
+  // guardan para el rol "especial" — igual que con Notas más arriba, es
+  // la misma excepción reflejada aquí (ver actualizarEditabilidadGlobal
+  // / debeBloquearSaldos, y las políticas RLS de balance_diario). El
+  // resto de roles de solo lectura sigue exactamente igual de bloqueado.
+  const esCampoSaldo = campo.indexOf('saldo') === 0;
+  const esEspecial    = sesionUsuario && sesionUsuario.rol === 'especial';
+  if (sesionUsuario && esRolSoloLectura(sesionUsuario.rol) && !(esEspecial && esCampoSaldo)) return;
 
   // Defensa adicional: en Warehouse Rentals, "Cobrado" es un campo
   // derivado (suma de vendedores) y no debe guardarse como si fuera un
