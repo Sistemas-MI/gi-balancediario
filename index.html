@@ -1274,6 +1274,23 @@
     pointer-events: auto !important;
   }
 
+  /* Saldos: el rol "especial" sí ve el tab en Unveil, NMH Baja Sur y
+     Warehouse Rentals, y puede dar de alta/borrar cuentas — el texto ya
+     quedó habilitado arriba vía actualizarEditabilidadGlobal()
+     (excepción "debeBloquearSaldos" en el JS), aquí solo hace falta
+     mostrar el tab y los botones de +/×. */
+  body.modo-especial #tabUnveilSaldos,
+  body.modo-especial #tabWHSaldos,
+  body.modo-especial #tabGenericoSaldos { display: inline-block !important; }
+  body.modo-especial #btnAgregarSaldo {
+    display: flex !important;
+    pointer-events: auto !important;
+  }
+  body.modo-especial .saldos-fila-remove {
+    display: flex !important;
+    pointer-events: auto !important;
+  }
+
   /* Botones de UI que no aplican para estos roles */
   body.modo-vista-acotada .btn-cerrar-mes,
   body.modo-vista-acotada .btn-pdf-wrap { display: none !important; }
@@ -5639,8 +5656,21 @@ function actualizarEditabilidadGlobal() {
   // campos del balance usa "debeBloquear" exactamente igual que antes.
   const debeBloquearNotas = esLector || esUser || esEditor || esVistaAcotada;
 
+  // Saldos (campo empieza con "saldo"): excepción explícita — el rol
+  // "especial" sí puede dar de alta/editar/borrar cuentas en el tab
+  // Saldos (Unveil, NMH Baja Sur y Warehouse Rentals). El resto de
+  // roles de vista acotada (wh/is/mi/bc/patricio) y lector/user/editor
+  // se quedan igual de bloqueados que antes; mes pasado también sigue
+  // bloqueando, igual que el resto del sistema.
+  const esEspecial = sesionUsuario && sesionUsuario.rol === 'especial';
+  const debeBloquearSaldos = esMesPasado || esLector || esUser || esEditor || (esVistaAcotada && !esEspecial);
+
   document.querySelectorAll('[data-field][contenteditable]').forEach(el => {
-    const bloquear = el.hasAttribute('data-rich') ? debeBloquearNotas : debeBloquear;
+    const campo = el.dataset.field || '';
+    let bloquear;
+    if (el.hasAttribute('data-rich')) bloquear = debeBloquearNotas;
+    else if (campo.indexOf('saldo') === 0) bloquear = debeBloquearSaldos;
+    else bloquear = debeBloquear;
     el.setAttribute('contenteditable', bloquear ? 'false' : 'true');
   });
 
@@ -5665,7 +5695,7 @@ function actualizarEditabilidadGlobal() {
   // mismo criterio que el select de categoría de Gastos, ya que no es
   // un [contenteditable] y la regla de arriba no lo alcanza.
   document.querySelectorAll('.saldos-col-moneda').forEach(sel => {
-    sel.disabled = debeBloquear;
+    sel.disabled = debeBloquearSaldos;
   });
 }
 
@@ -7180,9 +7210,10 @@ function renderSaldos(datos) {
 async function agregarSaldoFila() {
   // BLOQUEO ESTRUCTURAL para meses pasados — mismo criterio que
   // agregarImprevistoRow()/agregarTraspasoRow(). El botón "+" ya está
-  // oculto por CSS en modo-historico/modo-lector/modo-user/
-  // modo-especial; este corte es la capa de seguridad de datos, por si
-  // el click se disparara por otro medio.
+  // oculto por CSS en modo-historico/modo-lector/modo-user (y en el
+  // resto de vista-acotada, excepto modo-especial); este corte es la
+  // capa de seguridad de datos, por si el click se disparara por otro
+  // medio.
   const anioHoy = HOY.getFullYear();
   const mesHoy  = HOY.getMonth() + 1;
   const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
