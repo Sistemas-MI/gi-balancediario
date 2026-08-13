@@ -3567,6 +3567,137 @@
     border-radius: 0 2px 2px 0;
   }
 
+  /* ── PRESUPUESTO (solo Warehouse Rentals / NMH Baja Sur, tab
+     Vendedores, Balance de Flujo) ── Envuelve el contenido existente de
+     "Cobrado por vendedor" / "Faltante por vendedores" (sin tocar nada
+     de su propio HTML/CSS) en un layout de 2 columnas: la tabla se
+     queda igual a la izquierda, y esta tarjeta nueva va al lado en
+     pantallas anchas, o debajo en celular. Reutiliza exactamente la
+     misma paleta que ya usa el resto del sistema — dorado para meta/
+     resumen, los mismos 4 colores de avatar que ya tienen Regina G/
+     Regina M/Jaqueline V/Fernando C, y los mismos 4 tonos de
+     estado-badge (meta/ok/medio/alerta) que ya se usan en Avance hacia
+     la meta. */
+  .wh-vend-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+  }
+  .wh-vend-main { flex: 1; min-width: 0; }
+  .wh-vend-sidebar {
+    flex: 0 0 250px;
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: 14px;
+  }
+  .wh-presupuesto-card {
+    background: #fff;
+    border: 1px solid var(--linea);
+    border-left: 3px solid var(--dorado);
+    border-radius: 4px;
+    padding: 16px 18px 18px;
+  }
+  @media (max-width: 860px) {
+    .wh-vend-layout { flex-direction: column; }
+    .wh-vend-sidebar { width: 100%; flex: 0 0 auto; position: static; }
+  }
+  .wh-presupuesto-titulo {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--suave);
+    font-weight: 500;
+    margin: 0 0 6px;
+  }
+  .wh-presupuesto-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--cafe);
+    outline: none;
+    line-height: 1.2;
+  }
+  .wh-presupuesto-monto:focus { background: rgba(92,46,26,.05); border-radius: 3px; }
+  .wh-presupuesto-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    color: var(--suave);
+    margin: 3px 0 14px;
+  }
+  .wh-presupuesto-sub span { color: var(--cafe-light); font-weight: 500; }
+  .wh-presupuesto-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .wh-presupuesto-fila {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wh-presupuesto-fila .wh-v-iniciales {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .wh-presupuesto-fila-info { flex: 1; min-width: 0; }
+  .wh-presupuesto-fila-nombre {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--texto);
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wh-presupuesto-fila-barra-bg {
+    height: 3px;
+    background: var(--cafe-xs);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .wh-presupuesto-fila-barra-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width .5s ease;
+    background: var(--cafe);
+  }
+  .wh-presupuesto-fila-pct {
+    font-family: 'EB Garamond', serif;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    min-width: 34px;
+    text-align: right;
+  }
+  .wh-presupuesto-fila-pct.pct-meta   { color: #8A6B2E; }
+  .wh-presupuesto-fila-pct.pct-ok     { color: var(--cafe); }
+  .wh-presupuesto-fila-pct.pct-medio  { color: #7A6020; }
+  .wh-presupuesto-fila-pct.pct-alerta { color: #8C2010; }
+  .wh-presupuesto-fila-monto {
+    font-family: 'EB Garamond', serif;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-align: right;
+    color: #C0392B;
+    white-space: nowrap;
+  }
+  .wh-presupuesto-fila-monto.cumplido { color: #5C7A52; }
+  .wh-presupuesto-fila-falta {
+    font-family: 'Inter', sans-serif;
+    font-size: 9.5px;
+    color: var(--suave);
+    margin: -7px 0 0 32px;
+  }
+  .wh-presupuesto-fila-falta.cumplido { color: #5C7A52; }
+
   /* La fila de Total se eliminó: el monto total por vendedor ya se ve reflejado
      en la longitud de cada barra de progreso (proporcional al total real),
      así que una fila adicional de "Total cobrado" era información redundante.
@@ -3685,6 +3816,31 @@
   .wh-acum-col.grp-mensual-pct  { width: 50px; }
   .wh-acum-row.is-total .wh-acum-col.grp-mensual-meta,
   .wh-acum-row.is-total .wh-acum-col.grp-mensual-pct { color: var(--dorado); }
+
+  /* Columnas de la tabla "Presupuesto vs Cobrado" del Acumulado de
+     CADA empresa (Balance de Flujo únicamente — ver renderWHAcumPanel).
+     Mismo criterio que grp-mensual-meta/pct de arriba, con sus propios
+     anchos porque esta tabla tiene 4 columnas (Mes / Presupuesto /
+     Cobrado / % margen) en vez de 3. */
+  .wh-acum-col.acum-presu-monto,
+  .wh-acum-col.acum-presu-pct {
+    flex-shrink: 0;
+    text-align: right;
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--cafe);
+    white-space: nowrap;
+  }
+  .wh-acum-col.acum-presu-monto { width: 120px; }
+  .wh-acum-col.acum-presu-pct   { width: 60px; }
+  .wh-acum-row.is-total .wh-acum-col.acum-presu-monto,
+  .wh-acum-row.is-total .wh-acum-col.acum-presu-pct { color: var(--dorado); }
+  /* Margen por debajo del 100% (no se alcanzó el presupuesto ese mes):
+     mismo rojo que ya usa el sistema para "falta"/"por conseguir", para
+     que se lea de inmediato como una alerta y no como un dato más. */
+  .wh-acum-col.acum-presu-pct.bajo-presupuesto { color: #C0392B; }
+  .wh-acum-row.is-total .wh-acum-col.acum-presu-pct.bajo-presupuesto { color: #E8A798; }
 
   /* Tarjeta de total general del periodo, mismo componente visual que
      .hist-totales (caja café sólida con columnas). */
@@ -4473,6 +4629,10 @@
   <p class="sec-label bold">Avance hacia la meta mensual</p>
   <div class="termometro-card">
     <p class="meta-ref">Meta del mes: <strong contenteditable="true" data-field="meta" data-money="true" id="metaValor">$25,000,000</strong></p>
+    <!-- Presupuesto del mes: dato aparte de la Meta, se carga mes a mes
+         y solo se usa para la comparativa "Presupuesto vs Cobrado" del
+         tab Acumulado (no altera la barra/% de esta tarjeta). -->
+    <p class="meta-ref">Presupuesto del mes: <strong contenteditable="true" data-field="presupuesto" data-money="true" id="presupuestoValor">$0</strong></p>
     <div class="barra-bg">
       <div class="barra-fill" id="barraFill" style="width:0%"></div>
     </div>
@@ -4948,6 +5108,8 @@
   <!-- PANEL COBRADO POR VENDEDOR (solo WAREHOUSE RENTALS) -->
   <div id="panelVendedoresWH" style="display:none">
 
+  <div class="wh-vend-layout">
+    <div class="wh-vend-main">
 
     <!-- ── SECCIÓN 1: LO COBRADO ── -->
     <p class="sec-label bold">Cobrado por vendedor</p>
@@ -4983,6 +5145,33 @@
     <div class="wh-vendedores-grid wh-vendedores-grid--falta" id="whPorConseguirGrid">
       <!-- Filas generadas por renderWHPorConseguir() -->
     </div>
+
+    </div><!-- /wh-vend-main -->
+
+    <!-- ── PRESUPUESTO — solo Balance de Flujo (ver renderWHPresupuesto()).
+         Dos tarjetas apiladas en la misma columna lateral: arriba, meta
+         individual (Presupuesto ÷ 4) y % de avance por vendedor; abajo,
+         lo mismo pero en pesos — cuánto le falta a cada quien. -->
+    <div class="wh-vend-sidebar" id="whVendSidebar">
+      <aside class="wh-presupuesto-card" id="whPresupuestoCard">
+        <p class="wh-presupuesto-titulo">Presupuesto</p>
+        <div class="wh-presupuesto-monto" contenteditable="true" data-field="wh_presupuesto" data-money="true" id="whPresupuestoMonto">$0</div>
+        <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
+        <div class="wh-presupuesto-lista" id="whPresupuestoLista">
+          <!-- Filas generadas por renderWHPresupuesto() -->
+        </div>
+      </aside>
+
+      <aside class="wh-presupuesto-card" id="whPresupuestoFaltaCard">
+        <p class="wh-presupuesto-titulo">Faltante (presupuesto)</p>
+        <p class="wh-presupuesto-sub">Total: <span id="whPresupuestoFaltaTotal">$0</span></p>
+        <div class="wh-presupuesto-lista" id="whPresupuestoFaltaLista">
+          <!-- Filas generadas por renderWHPresupuesto() -->
+        </div>
+      </aside>
+    </div>
+
+  </div><!-- /wh-vend-layout -->
 
   </div><!-- /panelVendedoresWH -->
 
@@ -5224,6 +5413,13 @@ const DEFAULTS = {
   meta:               '$25,000,000',
   cobrado:            '$0',
   por_cobrar:         '$0',
+  // Presupuesto del mes — Balance de Flujo, TODAS las empresas. Se carga
+  // mes a mes (cada mes puede traer un presupuesto distinto, como Meta)
+  // y solo se usa para comparar contra "Cobrado" en el tab Acumulado
+  // (% margen). Es independiente de "wh_presupuesto" (el presupuesto de
+  // Vendedores, exclusivo de NMH Baja Sur, que se queda solo en ese
+  // tab) — no se mezclan ni se leen entre sí.
+  presupuesto:        '$0',
   plan_1_titulo:      'Crédito del banco',
   plan_1_desc:        'Usar la línea aprobada para cubrir el faltante mientras entran los cobros de esta semana.',
   plan_2_titulo:      'Cobrar esta semana',
@@ -5280,6 +5476,7 @@ const DEFAULTS = {
   wh_vend_nicole:       '',
   wh_vend_sin_vendedor: '',
   wh_vend_evento_atp:   '',
+  wh_presupuesto:       '$0',
 };
 
 // ── Estado global ──
@@ -7356,6 +7553,7 @@ function recalcular() {
   // misma pasada. renderWHPorConseguir() ya hace nada si el grid no
   // existe en el DOM (otra empresa), así que es seguro llamarla siempre.
   renderWHPorConseguir();
+  renderWHPresupuesto();
 }
 
 
@@ -7433,6 +7631,7 @@ function aplicarDatos(datos) {
   // actualizar a partir del DOM, que en este punto puede traer filas del
   // mes/empresa anterior todavía visibles).
   renderWHVendedores(datosSinFlag);
+  renderWHPresupuesto();
 
   // Auto-corrección silenciosa: si "cobrado" quedó guardado en Supabase
   // con un valor distinto a la suma real de vendedores (por ejemplo,
@@ -8975,6 +9174,7 @@ function cambiarTabWH(tab) {
     renderWHVendedores(datosActuales);
     actualizarBarrasWHVendedores();
     renderWHPorConseguir();
+    renderWHPresupuesto();
   }
   if (esAcumulado) entrarTabAcumulado();
   if (esGastos) {
@@ -9992,6 +10192,109 @@ function renderWHPorConseguir() {
   if (totalEl) totalEl.textContent = formatMXN(totalFalta);
 }
 
+// ── PRESUPUESTO ── Tarjeta lateral, exclusiva de Warehouse Rentals
+// (NMH Baja Sur) y solo en Balance de Flujo. Presupuesto total ÷ 4
+// vendedores activos = cuota individual; contra eso se compara lo que
+// cada quien ya cobró este mes (misma fuente que "Cobrado por
+// vendedor"/"Faltante por vendedores" arriba). No se conecta a "Meta"
+// ni a ningún otro cálculo — es un objetivo aparte, propio de esta
+// tarjeta, tal como se pidió.
+function renderWHPresupuesto() {
+  const card = document.getElementById('whPresupuestoCard');
+  if (!card) return;
+
+  // Exclusivo de Balance de Flujo — en Ventas se oculta toda la columna
+  // lateral (las dos tarjetas: Presupuesto y Faltante).
+  const sidebar     = document.getElementById('whVendSidebar');
+  const faltaCard   = document.getElementById('whPresupuestoFaltaCard');
+  if (modoVentas) {
+    if (sidebar) sidebar.style.display = 'none';
+    return;
+  }
+  if (sidebar) sidebar.style.display = '';
+
+  const activos = WH_VENDEDORES.filter(v => !v.historico);
+
+  const presupuestoEl = document.getElementById('whPresupuestoMonto');
+  const presupuestoTotal = presupuestoEl ? parseMXN(presupuestoEl.textContent) : 0;
+  const porVendedor = activos.length > 0 ? presupuestoTotal / activos.length : 0;
+
+  const porVendedorEl = document.getElementById('whPresupuestoPorVendedor');
+  if (porVendedorEl) porVendedorEl.textContent = formatMXN(porVendedor);
+
+  // Mismo origen y mismo fallback a DEFAULTS que ya usan "Cobrado por
+  // vendedor" y "Faltante por vendedores" — así los tres siempre
+  // coinciden entre sí.
+  const datos = datosActuales || {};
+  const cobradoDe = (key) => {
+    const campo = 'wh_vend_' + key;
+    const raw = (datos && datos[campo] !== undefined && datos[campo] !== '') ? datos[campo] : DEFAULTS[campo];
+    return parseMXN(raw || '$0');
+  };
+
+  // ── Tarjeta 1 "Presupuesto": monto ÷ 4 y % de avance por vendedor ──
+  const lista = document.getElementById('whPresupuestoLista');
+  if (lista) {
+    lista.innerHTML = activos.map(v => {
+      const cobrado = cobradoDe(v.key);
+      const pct     = porVendedor > 0 ? Math.round(cobrado / porVendedor * 100) : 0;
+      const anchoBarra = Math.max(Math.min(pct, 100), 0);
+
+      // Mismos 4 tonos que ya usa "Avance hacia la meta" (estado-badge):
+      // dorado si superó la cuota, café si va bien (80%+), dorado tenue
+      // si va a medias, rojo si va muy atrás.
+      let clasePct;
+      if (pct >= 100)      clasePct = 'pct-meta';
+      else if (pct >= 80)  clasePct = 'pct-ok';
+      else if (pct >= 50)  clasePct = 'pct-medio';
+      else                 clasePct = 'pct-alerta';
+
+      return `
+        <div class="wh-presupuesto-fila">
+          <div class="wh-v-iniciales ${v.color}">${v.iniciales}</div>
+          <div class="wh-presupuesto-fila-info">
+            <div class="wh-presupuesto-fila-nombre">${escapeHTML(v.nombre)}</div>
+            <div class="wh-presupuesto-fila-barra-bg">
+              <div class="wh-presupuesto-fila-barra-fill" style="width:${anchoBarra}%"></div>
+            </div>
+          </div>
+          <div class="wh-presupuesto-fila-pct ${clasePct}">${pct}%</div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Tarjeta 2 "Faltante (presupuesto)": mismo diseño de fila, pero
+  // mostrando el faltante en pesos en vez del %. ──
+  if (faltaCard) {
+    const faltaLista = document.getElementById('whPresupuestoFaltaLista');
+    let totalFaltaPresupuesto = 0;
+    const filasHTML = activos.map(v => {
+      const cobrado = cobradoDe(v.key);
+      const falta   = Math.max(0, porVendedor - cobrado);
+      totalFaltaPresupuesto += falta;
+      const pct = porVendedor > 0 ? Math.min(Math.round(cobrado / porVendedor * 100), 100) : 0;
+      const anchoBarra = Math.max(Math.min(pct, 100), 0);
+      const cumplido = falta <= 0;
+
+      return `
+        <div class="wh-presupuesto-fila">
+          <div class="wh-v-iniciales ${v.color}">${v.iniciales}</div>
+          <div class="wh-presupuesto-fila-info">
+            <div class="wh-presupuesto-fila-nombre">${escapeHTML(v.nombre)}</div>
+            <div class="wh-presupuesto-fila-barra-bg">
+              <div class="wh-presupuesto-fila-barra-fill" style="width:${anchoBarra}%"></div>
+            </div>
+          </div>
+          <div class="wh-presupuesto-fila-monto${cumplido ? ' cumplido' : ''}">${cumplido ? '✓' : escapeHTML(formatMXN(falta))}</div>
+        </div>`;
+    }).join('');
+
+    if (faltaLista) faltaLista.innerHTML = filasHTML;
+    const totalEl = document.getElementById('whPresupuestoFaltaTotal');
+    if (totalEl) totalEl.textContent = formatMXN(totalFaltaPresupuesto);
+  }
+}
+
 // Actualiza solo las barras y el resumen total (sin re-renderizar las filas)
 function actualizarBarrasWHVendedores() {
   const grid = document.getElementById('whVendedoresGrid');
@@ -10309,7 +10612,12 @@ async function cargarAcumuladoWH() {
   // piden siempre — son la base de la tabla "Meta · Cobrado · Por
   // cobrar" que reemplaza a "Cobrado por vendedor" fuera de WH.
   const esWH = empresaActual === 'warehouse_rentals';
-  const camposBase   = ['cobrado', 'meta', 'por_cobrar', 'imprevisto_ids'];
+  // "presupuesto" también es universal (existe para las 6 empresas,
+  // igual que meta/cobrado/por_cobrar): es la base de la comparativa
+  // "Presupuesto vs Cobrado" que se arma más abajo, exclusiva de
+  // Balance de Flujo (ver renderWHAcumPanel). No confundir con
+  // "wh_presupuesto" (Vendedores/NMH Baja Sur), que no se toca aquí.
+  const camposBase   = ['cobrado', 'meta', 'por_cobrar', 'presupuesto', 'imprevisto_ids'];
   const camposWhVend = esWH ? WH_VENDEDORES.map(v => 'wh_vend_' + v.key) : [];
   const camposSel    = [...camposBase, ...camposWhVend].map(encodeURIComponent).join(',');
 
@@ -10384,9 +10692,14 @@ function renderWHAcumPanel(meses, porMes) {
   // Total "cobrado", "meta" y "por_cobrar" mes a mes, sumados para el
   // periodo. Las 3 son universales (existen para las 6 empresas, mismos
   // campos que ya usa Balance Mensual).
-  let totalCobradoPeriodo   = 0;
-  let totalMetaPeriodo      = 0;
-  let totalPorCobrarPeriodo = 0;
+  let totalCobradoPeriodo     = 0;
+  let totalMetaPeriodo        = 0;
+  let totalPorCobrarPeriodo   = 0;
+  // Presupuesto: solo aplica en Balance de Flujo (ver comparativa más
+  // abajo, gateada con "!modoVentas"), pero el total se calcula siempre
+  // que haya datos — es barato y así la variable queda lista sin
+  // condicionar el map de abajo.
+  let totalPresupuestoPeriodo = 0;
   const filasMensuales = meses.map(m => {
     const key  = m.anio + '-' + m.mes;
     const d    = porMes[key] || {};
@@ -10407,12 +10720,14 @@ function renderWHAcumPanel(meses, porMes) {
     // mismo mes (si el mes no tiene imprevistos, __totalImprevistos es
     // undefined y no suma nada — queda igual que antes).
     const cobrado   = cobradoBase + (d.__totalImprevistos || 0);
-    const meta      = parseMXN(d.meta       || '$0');
-    const porCobrar = parseMXN(d.por_cobrar || '$0');
-    totalCobradoPeriodo   += cobrado;
-    totalMetaPeriodo      += meta;
-    totalPorCobrarPeriodo += porCobrar;
-    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado };
+    const meta        = parseMXN(d.meta        || '$0');
+    const porCobrar    = parseMXN(d.por_cobrar  || '$0');
+    const presupuesto  = parseMXN(d.presupuesto || '$0');
+    totalCobradoPeriodo     += cobrado;
+    totalMetaPeriodo        += meta;
+    totalPorCobrarPeriodo   += porCobrar;
+    totalPresupuestoPeriodo += presupuesto;
+    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado, presupuesto };
   });
 
   // Suma por vendedor a lo largo de todos los meses del periodo — solo
@@ -10438,7 +10753,7 @@ function renderWHAcumPanel(meses, porMes) {
   // avisa en vez de mostrar tablas vacías en $0. Para las empresas sin
   // vendedores, "meta" también cuenta como dato (a veces hay meta fijada
   // sin nada cobrado todavía, sobre todo al inicio del periodo).
-  const hayDatos = totalCobradoPeriodo > 0 || totalVendedoresPeriodo > 0 ||
+  const hayDatos = totalCobradoPeriodo > 0 || totalVendedoresPeriodo > 0 || totalPresupuestoPeriodo > 0 ||
     (!esWH && (totalMetaPeriodo > 0 || totalPorCobrarPeriodo > 0));
   if (!hayDatos) {
     panel.innerHTML = '<p class="hist-empty">Sin datos registrados para este periodo</p>';
@@ -10456,6 +10771,50 @@ function renderWHAcumPanel(meses, porMes) {
       <div class="wh-acum-col wh-acum-monto">${formatMXN(f.cobrado)}</div>
     </div>
   `).join('');
+
+  // ── "Presupuesto vs Cobrado" — comparativa mes a mes contra el
+  // presupuesto cargado en Balance de Flujo (campo "presupuesto", ver
+  // termometro-card). Exclusiva de Balance de Flujo: en modo Ventas no
+  // aplica (el presupuesto no tiene contraparte de "venta_objetivo"),
+  // así que el bloque completo se omite ahí, sin condicionar el resto
+  // del panel. "% margen" = Cobrado ÷ Presupuesto de ese mes — igual
+  // fórmula que ya usa "% logrado"/"% margen" en el resto del sistema
+  // (Meta·Cobrado, Acumulado de Grupo), aplicada aquí contra Presupuesto
+  // en vez de contra Meta.
+  const pctMargenMes = (cobrado, presupuesto) =>
+    presupuesto > 0 ? Math.round(cobrado / presupuesto * 100) : null;
+  const claseMargen = (pct) => (pct !== null && pct < 100) ? 'bajo-presupuesto' : '';
+
+  const filasPresupuestoHTML = filasMensuales.map(f => {
+    const pct = pctMargenMes(f.cobrado, f.presupuesto);
+    return `
+    <div class="wh-acum-row">
+      <div class="wh-acum-col wh-acum-nombre">${escapeHTML(f.nombre)}</div>
+      <div class="wh-acum-col acum-presu-monto">${formatMXN(f.presupuesto)}</div>
+      <div class="wh-acum-col wh-acum-monto">${formatMXN(f.cobrado)}</div>
+      <div class="wh-acum-col acum-presu-pct ${claseMargen(pct)}">${pct === null ? '—' : pct + '%'}</div>
+    </div>`;
+  }).join('');
+
+  const pctMargenPeriodo = pctMargenMes(totalCobradoPeriodo, totalPresupuestoPeriodo);
+
+  const presupuestoVsCobradoHTML = modoVentas ? '' : `
+    <p class="wh-acum-subtitulo">Presupuesto vs Cobrado</p>
+    <div class="wh-acum-tabla">
+      <div class="wh-acum-tabla-head" style="align-items:center">
+        <div class="wh-acum-col wh-acum-nombre">Mes</div>
+        <div class="wh-acum-col acum-presu-monto">Presupuesto</div>
+        <div class="wh-acum-col wh-acum-monto">Cobrado</div>
+        <div class="wh-acum-col acum-presu-pct">% margen</div>
+      </div>
+      ${filasPresupuestoHTML}
+      <div class="wh-acum-row is-total">
+        <div class="wh-acum-col wh-acum-nombre">Total:</div>
+        <div class="wh-acum-col acum-presu-monto">${formatMXN(totalPresupuestoPeriodo)}</div>
+        <div class="wh-acum-col wh-acum-monto">${formatMXN(totalCobradoPeriodo)}</div>
+        <div class="wh-acum-col acum-presu-pct ${claseMargen(pctMargenPeriodo)}">${pctMargenPeriodo === null ? '—' : pctMargenPeriodo + '%'}</div>
+      </div>
+    </div>`;
 
   // Bloque "Meta · Cobrado · Por cobrar" del periodo — mismo bloque que
   // ya usan las empresas sin vendedores, extraído aquí para poder
@@ -10561,6 +10920,8 @@ function renderWHAcumPanel(meses, porMes) {
         <div class="wh-acum-col wh-acum-monto">${formatMXN(totalCobradoPeriodo)}</div>
       </div>
     </div>
+
+    ${presupuestoVsCobradoHTML}
 
     ${metaWHTituloHTML}
     ${metaWHTablaHTML}
