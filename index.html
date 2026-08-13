@@ -5155,7 +5155,10 @@
     <div class="wh-vend-sidebar" id="whVendSidebar">
       <aside class="wh-presupuesto-card" id="whPresupuestoCard">
         <p class="wh-presupuesto-titulo">Presupuesto</p>
-        <div class="wh-presupuesto-monto" contenteditable="true" data-field="wh_presupuesto" data-money="true" id="whPresupuestoMonto">$0</div>
+        <!-- Solo lectura: el monto se toma de "Presupuesto del mes"
+             (Balance Mensual → campo "presupuesto"), se captura ahí una
+             sola vez y aquí solo se refleja (ver renderWHPresupuesto()). -->
+        <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
         <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
         <div class="wh-presupuesto-lista" id="whPresupuestoLista">
           <!-- Filas generadas por renderWHPresupuesto() -->
@@ -5414,11 +5417,12 @@ const DEFAULTS = {
   cobrado:            '$0',
   por_cobrar:         '$0',
   // Presupuesto del mes — Balance de Flujo, TODAS las empresas. Se carga
-  // mes a mes (cada mes puede traer un presupuesto distinto, como Meta)
-  // y solo se usa para comparar contra "Cobrado" en el tab Acumulado
-  // (% margen). Es independiente de "wh_presupuesto" (el presupuesto de
-  // Vendedores, exclusivo de NMH Baja Sur, que se queda solo en ese
-  // tab) — no se mezclan ni se leen entre sí.
+  // mes a mes (cada mes puede traer un presupuesto distinto, como Meta).
+  // Se usa para comparar contra "Cobrado" en el tab Acumulado (% margen)
+  // y, exclusivamente en NMH Baja Sur (warehouse_rentals), también
+  // alimenta el monto de la tarjeta "Presupuesto" del tab Vendedores
+  // (÷ 4 y % de avance por vendedor) — ver renderWHPresupuesto(). Un
+  // solo lugar de captura para los dos usos, sin doble entrada.
   presupuesto:        '$0',
   plan_1_titulo:      'Crédito del banco',
   plan_1_desc:        'Usar la línea aprobada para cubrir el faltante mientras entran los cobros de esta semana.',
@@ -5476,7 +5480,9 @@ const DEFAULTS = {
   wh_vend_nicole:       '',
   wh_vend_sin_vendedor: '',
   wh_vend_evento_atp:   '',
-  wh_presupuesto:       '$0',
+  // "wh_presupuesto" ya no se usa: la tarjeta "Presupuesto" de Vendedores
+  // ahora se llena sola desde "presupuesto" (Balance Mensual → ver
+  // renderWHPresupuesto()), no tiene su propio campo guardado.
 };
 
 // ── Estado global ──
@@ -10197,8 +10203,14 @@ function renderWHPorConseguir() {
 // vendedores activos = cuota individual; contra eso se compara lo que
 // cada quien ya cobró este mes (misma fuente que "Cobrado por
 // vendedor"/"Faltante por vendedores" arriba). No se conecta a "Meta"
-// ni a ningún otro cálculo — es un objetivo aparte, propio de esta
-// tarjeta, tal como se pidió.
+// ni a ningún otro cálculo.
+//
+// El monto YA NO se captura aquí: se toma directo de "Presupuesto del
+// mes" (campo "presupuesto", capturado en Balance Mensual — mismo dato
+// que alimenta la comparativa "Presupuesto vs Cobrado" del tab
+// Acumulado). Así solo hay un lugar donde escribirlo y esta tarjeta
+// siempre queda sincronizada, sin captura doble. whPresupuestoMonto es
+// ahora de solo lectura (ver HTML: ya no tiene contenteditable).
 function renderWHPresupuesto() {
   const card = document.getElementById('whPresupuestoCard');
   if (!card) return;
@@ -10215,17 +10227,22 @@ function renderWHPresupuesto() {
 
   const activos = WH_VENDEDORES.filter(v => !v.historico);
 
-  const presupuestoEl = document.getElementById('whPresupuestoMonto');
-  const presupuestoTotal = presupuestoEl ? parseMXN(presupuestoEl.textContent) : 0;
-  const porVendedor = activos.length > 0 ? presupuestoTotal / activos.length : 0;
-
-  const porVendedorEl = document.getElementById('whPresupuestoPorVendedor');
-  if (porVendedorEl) porVendedorEl.textContent = formatMXN(porVendedor);
-
   // Mismo origen y mismo fallback a DEFAULTS que ya usan "Cobrado por
   // vendedor" y "Faltante por vendedores" — así los tres siempre
   // coinciden entre sí.
   const datos = datosActuales || {};
+
+  const presupuestoTotal = parseMXN(
+    (datos.presupuesto !== undefined && datos.presupuesto !== '') ? datos.presupuesto : DEFAULTS.presupuesto
+  );
+  const porVendedor = activos.length > 0 ? presupuestoTotal / activos.length : 0;
+
+  const presupuestoEl = document.getElementById('whPresupuestoMonto');
+  if (presupuestoEl) presupuestoEl.textContent = formatMXN(presupuestoTotal);
+
+  const porVendedorEl = document.getElementById('whPresupuestoPorVendedor');
+  if (porVendedorEl) porVendedorEl.textContent = formatMXN(porVendedor);
+
   const cobradoDe = (key) => {
     const campo = 'wh_vend_' + key;
     const raw = (datos && datos[campo] !== undefined && datos[campo] !== '') ? datos[campo] : DEFAULTS[campo];
