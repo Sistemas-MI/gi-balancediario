@@ -10227,22 +10227,22 @@ function renderWHPresupuesto() {
 
   const activos = WH_VENDEDORES.filter(v => !v.historico);
 
-  // Mismo origen y mismo fallback a DEFAULTS que ya usan "Cobrado por
-  // vendedor" y "Faltante por vendedores" — así los tres siempre
-  // coinciden entre sí.
-  const datos = datosActuales || {};
-
-  const presupuestoTotal = parseMXN(
-    (datos.presupuesto !== undefined && datos.presupuesto !== '') ? datos.presupuesto : DEFAULTS.presupuesto
-  );
+  // Se lee directo del campo en pantalla (igual que "meta" en
+  // renderWHPorConseguir), NO de datosActuales — ese objeto es una foto
+  // fija de cuando cargó la página/empresa y no se actualiza mientras
+  // escribes, así que si se leyera de ahí la tarjeta se quedaría con el
+  // valor viejo hasta recargar. Leyendo el DOM, el reflejo es instantáneo.
+  const presupuestoEl = document.getElementById('presupuestoValor');
+  const presupuestoTotal = presupuestoEl ? parseMXN(presupuestoEl.textContent) : 0;
   const porVendedor = activos.length > 0 ? presupuestoTotal / activos.length : 0;
 
-  const presupuestoEl = document.getElementById('whPresupuestoMonto');
-  if (presupuestoEl) presupuestoEl.textContent = formatMXN(presupuestoTotal);
+  const presupuestoMontoEl = document.getElementById('whPresupuestoMonto');
+  if (presupuestoMontoEl) presupuestoMontoEl.textContent = formatMXN(presupuestoTotal);
 
   const porVendedorEl = document.getElementById('whPresupuestoPorVendedor');
   if (porVendedorEl) porVendedorEl.textContent = formatMXN(porVendedor);
 
+  const datos = datosActuales || {};
   const cobradoDe = (key) => {
     const campo = 'wh_vend_' + key;
     const raw = (datos && datos[campo] !== undefined && datos[campo] !== '') ? datos[campo] : DEFAULTS[campo];
