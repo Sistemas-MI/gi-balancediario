@@ -10822,7 +10822,7 @@ function renderWHAcumPanel(meses, porMes) {
         <div class="wh-acum-col wh-acum-nombre">Mes</div>
         <div class="wh-acum-col acum-presu-monto">Presupuesto</div>
         <div class="wh-acum-col wh-acum-monto">Cobrado</div>
-        <div class="wh-acum-col acum-presu-pct">% margen</div>
+        <div class="wh-acum-col acum-presu-pct">%</div>
       </div>
       ${filasPresupuestoHTML}
       <div class="wh-acum-row is-total">
@@ -11216,7 +11216,7 @@ async function cargarAcumuladoGrupo() {
   // empresas) + los campos de vendedores (solo existen como dato real
   // para Warehouse Rentals; pedirlos para las demás no rompe nada,
   // Supabase simplemente no devuelve filas para esas combinaciones).
-  const camposBase   = ['cobrado', 'meta', 'venta_objetivo', 'por_cobrar', 'imprevisto_ids'];
+  const camposBase   = ['cobrado', 'meta', 'venta_objetivo', 'por_cobrar', 'presupuesto', 'imprevisto_ids'];
   const camposWhVend = WH_VENDEDORES.map(v => 'wh_vend_' + v.key);
   const camposSel    = [...camposBase, ...camposWhVend].map(encodeURIComponent).join(',');
 
@@ -11304,27 +11304,34 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
   let totalCobradoPeriodo   = 0;
   let totalMetaPeriodo      = 0;
   let totalPorCobrarPeriodo = 0;
+  // Presupuesto: mismo campo universal (capturado en Balance Mensual de
+  // cada empresa) que ya usa la comparativa "Presupuesto vs Cobrado" del
+  // Acumulado individual — aquí simplemente se suma entre las 5 empresas
+  // mes a mes. Exclusivo de Balance de Flujo, igual que allá.
+  let totalPresupuestoPeriodo = 0;
   const totalesPorEmpresa = {};
   empresaIds.forEach(id => { totalesPorEmpresa[id] = 0; });
 
   const filasMensuales = meses.map(m => {
     const key = m.anio + '-' + m.mes;
-    let cobradoMes = 0, metaMes = 0, porCobrarMes = 0;
+    let cobradoMes = 0, metaMes = 0, porCobrarMes = 0, presupuestoMes = 0;
     empresaIds.forEach(empId => {
       const d = porEmpMes[empId][key] || {};
       const cobradoEmp = grpCobradoEmpresaMes(empId, d);
-      cobradoMes   += cobradoEmp;
-      metaMes      += parseMXN(d[metaCampo] || '$0');
-      porCobrarMes += parseMXN(d.por_cobrar || '$0');
+      cobradoMes     += cobradoEmp;
+      metaMes        += parseMXN(d[metaCampo] || '$0');
+      porCobrarMes   += parseMXN(d.por_cobrar || '$0');
+      presupuestoMes += parseMXN(d.presupuesto || '$0');
       totalesPorEmpresa[empId] += cobradoEmp;
     });
-    totalCobradoPeriodo   += cobradoMes;
-    totalMetaPeriodo      += metaMes;
-    totalPorCobrarPeriodo += porCobrarMes;
-    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado: cobradoMes, meta: metaMes };
+    totalCobradoPeriodo     += cobradoMes;
+    totalMetaPeriodo        += metaMes;
+    totalPorCobrarPeriodo   += porCobrarMes;
+    totalPresupuestoPeriodo += presupuestoMes;
+    return { nombre: MESES_NOMBRES[m.mes - 1], cobrado: cobradoMes, meta: metaMes, presupuesto: presupuestoMes };
   });
 
-  const hayDatos = totalCobradoPeriodo > 0 || totalMetaPeriodo > 0 || totalPorCobrarPeriodo > 0;
+  const hayDatos = totalCobradoPeriodo > 0 || totalMetaPeriodo > 0 || totalPorCobrarPeriodo > 0 || totalPresupuestoPeriodo > 0;
   if (!hayDatos) {
     panel.innerHTML = '<p class="hist-empty">Sin datos registrados para este periodo</p>';
     return;
@@ -11352,6 +11359,47 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
   const pctLogrado = totalMetaPeriodo > 0
     ? Math.round(totalCobradoPeriodo / totalMetaPeriodo * 100)
     : 0;
+
+  // ── "Presupuesto vs Cobrado" — mismo criterio exacto que el Acumulado
+  // de cada empresa individual (grpPctPresupuesto usa "—" en vez de
+  // "0%" cuando ese mes no tiene presupuesto capturado en ninguna de
+  // las 5 empresas). Exclusiva de Balance de Flujo: en modo Ventas se
+  // omite el bloque completo, igual que en el Acumulado individual.
+  function grpPctPresupuesto(cobrado, presupuesto) {
+    return presupuesto > 0 ? Math.round(cobrado / presupuesto * 100) : null;
+  }
+  const claseMargenGrp = (pct) => (pct !== null && pct < 100) ? 'bajo-presupuesto' : '';
+
+  const filasPresupuestoHTML = filasMensuales.map(f => {
+    const pct = grpPctPresupuesto(f.cobrado, f.presupuesto);
+    return `
+    <div class="wh-acum-row">
+      <div class="wh-acum-col wh-acum-nombre">${escapeHTML(f.nombre)}</div>
+      <div class="wh-acum-col acum-presu-monto">${formatMXN(f.presupuesto)}</div>
+      <div class="wh-acum-col wh-acum-monto">${formatMXN(f.cobrado)}</div>
+      <div class="wh-acum-col acum-presu-pct ${claseMargenGrp(pct)}">${pct === null ? '—' : pct + '%'}</div>
+    </div>`;
+  }).join('');
+
+  const pctPresupuestoPeriodo = grpPctPresupuesto(totalCobradoPeriodo, totalPresupuestoPeriodo);
+
+  const presupuestoVsCobradoGrpHTML = modoVentas ? '' : `
+    <p class="wh-acum-subtitulo">Presupuesto vs Cobrado</p>
+    <div class="wh-acum-tabla">
+      <div class="wh-acum-tabla-head" style="align-items:center">
+        <div class="wh-acum-col wh-acum-nombre">Mes</div>
+        <div class="wh-acum-col acum-presu-monto">Presupuesto</div>
+        <div class="wh-acum-col wh-acum-monto">Cobrado</div>
+        <div class="wh-acum-col acum-presu-pct">%</div>
+      </div>
+      ${filasPresupuestoHTML}
+      <div class="wh-acum-row is-total">
+        <div class="wh-acum-col wh-acum-nombre">Total:</div>
+        <div class="wh-acum-col acum-presu-monto">${formatMXN(totalPresupuestoPeriodo)}</div>
+        <div class="wh-acum-col wh-acum-monto">${formatMXN(totalCobradoPeriodo)}</div>
+        <div class="wh-acum-col acum-presu-pct ${claseMargenGrp(pctPresupuestoPeriodo)}">${pctPresupuestoPeriodo === null ? '—' : pctPresupuestoPeriodo + '%'}</div>
+      </div>
+    </div>`;
 
   // Desglose mensual de "Cobrado por empresa" — con los meses en
   // columna para comparar mes a mes por empresa.
@@ -11431,6 +11479,8 @@ function renderGrpAcumPanel(meses, empresaIds, porEmpMes) {
         <div class="wh-acum-col grp-mensual-pct">${pctLogrado}%</div>
       </div>
     </div>
+
+    ${presupuestoVsCobradoGrpHTML}
 
     <p class="wh-acum-subtitulo">${lblMeta} · ${lblCobrado} · Por cobrar</p>
     <div class="wh-acum-tabla">
