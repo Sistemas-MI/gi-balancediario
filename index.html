@@ -3568,54 +3568,47 @@
   }
 
   /* ── PRESUPUESTO (solo Warehouse Rentals / NMH Baja Sur, tab
-     Vendedores, Balance de Flujo) ── Envuelve el contenido existente de
-     "Cobrado por vendedor" / "Faltante por vendedores" (sin tocar nada
-     de su propio HTML/CSS) en un layout de 2 columnas: la tabla se
-     queda igual a la izquierda, y esta tarjeta nueva va al lado en
-     pantallas anchas, o debajo en celular. Reutiliza exactamente la
-     misma paleta que ya usa el resto del sistema — dorado para meta/
-     resumen, los mismos 4 colores de avatar que ya tienen Regina G/
-     Regina M/Jaqueline V/Fernando C, y los mismos 4 tonos de
-     estado-badge (meta/ok/medio/alerta) que ya se usan en Avance hacia
-     la meta. */
+     Vendedores, Balance de Flujo) ── Cada tarjeta va alineada junto a
+     su sección correspondiente: "Presupuesto de ventas" al costado de
+     "Cobrado por vendedor", y "Faltante (presupuesto)" al costado de
+     "Faltante por vendedores" — dos bloques de 2 columnas, uno debajo
+     del otro (antes iban las dos apiladas juntas arriba). Reutiliza
+     exactamente la misma paleta que ya usa el resto del sistema —
+     dorado para meta/resumen, los mismos 4 colores de avatar que ya
+     tienen Regina G/Regina M/Jaqueline V/Fernando C, y los mismos 4
+     tonos de estado-badge (meta/ok/medio/alerta) que ya se usan en
+     Avance hacia la meta. */
   .wh-vend-layout {
     display: flex;
     align-items: flex-start;
-    gap: 22px;
+    gap: 30px;
   }
   .wh-vend-main { flex: 1; min-width: 0; }
-  .wh-vend-sidebar {
-    flex: 0 0 250px;
-    width: 250px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    position: sticky;
-    top: 14px;
-  }
   .wh-presupuesto-card {
+    flex: 0 0 320px;
+    width: 320px;
     background: #fff;
     border: 1px solid var(--linea);
     border-left: 3px solid var(--dorado);
     border-radius: 4px;
-    padding: 16px 18px 18px;
+    padding: 20px 22px 22px;
   }
   @media (max-width: 860px) {
     .wh-vend-layout { flex-direction: column; }
-    .wh-vend-sidebar { width: 100%; flex: 0 0 auto; position: static; }
+    .wh-presupuesto-card { width: 100%; flex: 0 0 auto; }
   }
   .wh-presupuesto-titulo {
     font-family: 'Inter', sans-serif;
-    font-size: 9px;
+    font-size: 9.5px;
     letter-spacing: .2em;
     text-transform: uppercase;
     color: var(--suave);
     font-weight: 500;
-    margin: 0 0 6px;
+    margin: 0 0 8px;
   }
   .wh-presupuesto-monto {
     font-family: 'EB Garamond', serif;
-    font-size: 24px;
+    font-size: 30px;
     font-weight: 600;
     color: var(--cafe);
     outline: none;
@@ -3624,34 +3617,58 @@
   .wh-presupuesto-monto:focus { background: rgba(92,46,26,.05); border-radius: 3px; }
   .wh-presupuesto-sub {
     font-family: 'Inter', sans-serif;
-    font-size: 10.5px;
+    font-size: 11.5px;
     color: var(--suave);
-    margin: 3px 0 14px;
+    margin: 4px 0 14px;
   }
   .wh-presupuesto-sub span { color: var(--cafe-light); font-weight: 500; }
+  .wh-presupuesto-nota {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-style: italic;
+    color: var(--suave);
+    line-height: 1.4;
+    margin: 0 0 4px;
+  }
+  /* La lista ahora está separada por líneas (en vez de solo un
+     espacio/gap) y cada fila mide lo mismo de alto que una fila de
+     "Cobrado por vendedor"/"Faltante por vendedores" (mismo padding
+     vertical, avatar casi del mismo tamaño) — así los nombres de las
+     dos tablas quedan a la misma altura, fila por fila. */
   .wh-presupuesto-lista {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    border-top: 1px solid var(--linea);
+    margin-top: 8px;
   }
+  /* Ajuste puntual solo para esta tarjeta: su encabezado es más corto
+     que la caja roja "Falta para la meta" de la izquierda, así que sus
+     filas arrancaban más arriba que las de "Faltante por vendedores".
+     Se empuja nada más esta lista hacia abajo (nada de lo demás
+     cambia) para que Regina G/Regina M/Jaqueline V/Fernando C queden a
+     la misma altura en las dos tarjetas. */
+  #whPresupuestoFaltaLista { margin-top: 48px; }
   .wh-presupuesto-fila {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--linea);
   }
+  .wh-presupuesto-fila:last-child { border-bottom: none; }
   .wh-presupuesto-fila .wh-v-iniciales {
-    width: 24px;
-    height: 24px;
-    font-size: 10px;
+    width: 30px;
+    height: 30px;
+    font-size: 11px;
     flex-shrink: 0;
   }
   .wh-presupuesto-fila-info { flex: 1; min-width: 0; }
   .wh-presupuesto-fila-nombre {
     font-family: 'Inter', sans-serif;
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--texto);
-    margin-bottom: 3px;
+    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3670,10 +3687,10 @@
   }
   .wh-presupuesto-fila-pct {
     font-family: 'EB Garamond', serif;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     flex-shrink: 0;
-    min-width: 34px;
+    min-width: 38px;
     text-align: right;
   }
   .wh-presupuesto-fila-pct.pct-meta   { color: #8A6B2E; }
@@ -3682,7 +3699,7 @@
   .wh-presupuesto-fila-pct.pct-alerta { color: #8C2010; }
   .wh-presupuesto-fila-monto {
     font-family: 'EB Garamond', serif;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     flex-shrink: 0;
     text-align: right;
@@ -5108,10 +5125,10 @@
   <!-- PANEL COBRADO POR VENDEDOR (solo WAREHOUSE RENTALS) -->
   <div id="panelVendedoresWH" style="display:none">
 
+  <!-- ── SECCIÓN 1: LO COBRADO, con su tarjeta de Presupuesto al costado ── -->
   <div class="wh-vend-layout">
     <div class="wh-vend-main">
 
-    <!-- ── SECCIÓN 1: LO COBRADO ── -->
     <p class="sec-label bold">Cobrado por vendedor</p>
     <div class="wh-resumen-card">
       <div class="wh-resumen-top">
@@ -5128,9 +5145,31 @@
       <!-- Filas generadas por renderWHVendedores() -->
     </div>
 
-    <div class="ornamento">— · —</div>
+    </div><!-- /wh-vend-main -->
 
-    <!-- ── SECCIÓN 2: LO QUE FALTA POR CONSEGUIR, DIVIDIDO ENTRE LOS 4 ── -->
+    <!-- Solo Balance de Flujo (ver renderWHPresupuesto()). Meta individual
+         (Presupuesto ÷ 4) y % de avance por vendedor. -->
+    <aside class="wh-presupuesto-card" id="whPresupuestoCard">
+      <p class="wh-presupuesto-titulo">Presupuesto de ventas</p>
+      <!-- Solo lectura: el monto se toma de "Presupuesto del mes"
+           (Balance Mensual → campo "presupuesto"), se captura ahí una
+           sola vez y aquí solo se refleja (ver renderWHPresupuesto()). -->
+      <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
+      <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
+      <p class="wh-presupuesto-nota">Nota: el % es lo que cada quien ya cobró contra lo que le tocaría cobrar según el presupuesto.</p>
+      <div class="wh-presupuesto-lista" id="whPresupuestoLista">
+        <!-- Filas generadas por renderWHPresupuesto() -->
+      </div>
+    </aside>
+  </div><!-- /wh-vend-layout -->
+
+  <div class="ornamento">— · —</div>
+
+  <!-- ── SECCIÓN 2: LO QUE FALTA POR CONSEGUIR, con su tarjeta de
+       Faltante (presupuesto) al costado ── -->
+  <div class="wh-vend-layout">
+    <div class="wh-vend-main">
+
     <div class="sec-header-row">
       <p class="sec-label bold" style="margin:0">Faltante por vendedores</p>
     </div>
@@ -5148,32 +5187,14 @@
 
     </div><!-- /wh-vend-main -->
 
-    <!-- ── PRESUPUESTO — solo Balance de Flujo (ver renderWHPresupuesto()).
-         Dos tarjetas apiladas en la misma columna lateral: arriba, meta
-         individual (Presupuesto ÷ 4) y % de avance por vendedor; abajo,
-         lo mismo pero en pesos — cuánto le falta a cada quien. -->
-    <div class="wh-vend-sidebar" id="whVendSidebar">
-      <aside class="wh-presupuesto-card" id="whPresupuestoCard">
-        <p class="wh-presupuesto-titulo">Presupuesto</p>
-        <!-- Solo lectura: el monto se toma de "Presupuesto del mes"
-             (Balance Mensual → campo "presupuesto"), se captura ahí una
-             sola vez y aquí solo se refleja (ver renderWHPresupuesto()). -->
-        <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
-        <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
-        <div class="wh-presupuesto-lista" id="whPresupuestoLista">
-          <!-- Filas generadas por renderWHPresupuesto() -->
-        </div>
-      </aside>
-
-      <aside class="wh-presupuesto-card" id="whPresupuestoFaltaCard">
-        <p class="wh-presupuesto-titulo">Faltante (presupuesto)</p>
-        <p class="wh-presupuesto-sub">Total: <span id="whPresupuestoFaltaTotal">$0</span></p>
-        <div class="wh-presupuesto-lista" id="whPresupuestoFaltaLista">
-          <!-- Filas generadas por renderWHPresupuesto() -->
-        </div>
-      </aside>
-    </div>
-
+    <aside class="wh-presupuesto-card" id="whPresupuestoFaltaCard">
+      <p class="wh-presupuesto-titulo">Faltante (presupuesto)</p>
+      <p class="wh-presupuesto-sub">Total: <span id="whPresupuestoFaltaTotal">$0</span></p>
+      <p class="wh-presupuesto-nota">Lo que le falta a cada quien para llegar a su cuota del presupuesto.</p>
+      <div class="wh-presupuesto-lista" id="whPresupuestoFaltaLista">
+        <!-- Filas generadas por renderWHPresupuesto() -->
+      </div>
+    </aside>
   </div><!-- /wh-vend-layout -->
 
   </div><!-- /panelVendedoresWH -->
@@ -10215,15 +10236,17 @@ function renderWHPresupuesto() {
   const card = document.getElementById('whPresupuestoCard');
   if (!card) return;
 
-  // Exclusivo de Balance de Flujo — en Ventas se oculta toda la columna
-  // lateral (las dos tarjetas: Presupuesto y Faltante).
-  const sidebar     = document.getElementById('whVendSidebar');
-  const faltaCard   = document.getElementById('whPresupuestoFaltaCard');
+  // Exclusivo de Balance de Flujo — en Ventas se ocultan las dos
+  // tarjetas (cada una ya no comparte un contenedor común, así que se
+  // ocultan por separado).
+  const faltaCard = document.getElementById('whPresupuestoFaltaCard');
   if (modoVentas) {
-    if (sidebar) sidebar.style.display = 'none';
+    card.style.display = 'none';
+    if (faltaCard) faltaCard.style.display = 'none';
     return;
   }
-  if (sidebar) sidebar.style.display = '';
+  card.style.display = '';
+  if (faltaCard) faltaCard.style.display = '';
 
   const activos = WH_VENDEDORES.filter(v => !v.historico);
 
