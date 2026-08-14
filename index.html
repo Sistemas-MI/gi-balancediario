@@ -10102,6 +10102,14 @@ function renderWHVendedores(datos) {
           await guardarCampo(empresaActual, 'cobrado', totalActualizado);
         }, 800);
       });
+
+      // Formato de moneda al salir del campo — mismo criterio que ya
+      // usa cualquier otro campo de dinero del sistema (data-money):
+      // si escribes "1500", al perder el foco queda "$1,500.00".
+      montoEl.addEventListener('blur', () => {
+        montoEl.textContent = formatMXN(parseMXN(montoEl.textContent));
+        datosActuales[campo] = montoEl.textContent;
+      });
     }
 
     grid.appendChild(row);
