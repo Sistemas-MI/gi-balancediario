@@ -3685,6 +3685,22 @@
     transition: width .5s ease;
     background: var(--cafe);
   }
+  /* Debajo de la barra: cuánto lleva cobrado ese vendedor vs. su cuota
+     (Presupuesto ÷ 4) — chiquito, para no competir con el nombre ni
+     con el %, pero visible de un vistazo. Solo en "Presupuesto de
+     ventas"; "Faltante (presupuesto)" no lleva esto, no se tocó. */
+  .wh-presupuesto-fila-detalle {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 5px;
+    font-family: 'Inter', sans-serif;
+    font-size: 9.5px;
+    white-space: nowrap;
+  }
+  .wh-presupuesto-fila-cobrado { font-weight: 600; color: var(--cafe); }
+  .wh-presupuesto-fila-sep     { color: var(--suave); font-style: italic; }
+  .wh-presupuesto-fila-cuota   { color: var(--suave); }
   .wh-presupuesto-fila-pct {
     font-family: 'EB Garamond', serif;
     font-size: 15px;
@@ -5156,7 +5172,7 @@
            sola vez y aquí solo se refleja (ver renderWHPresupuesto()). -->
       <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
       <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
-      <p class="wh-presupuesto-nota">El % es lo que cada quien ya cobró contra lo que le tocaría cobrar según el presupuesto.</p>
+      <p class="wh-presupuesto-nota">Nota: el % es lo que cada quien ya cobró contra lo que le tocaría cobrar según el presupuesto.</p>
       <div class="wh-presupuesto-lista" id="whPresupuestoLista">
         <!-- Filas generadas por renderWHPresupuesto() -->
       </div>
@@ -10304,6 +10320,11 @@ function renderWHPresupuesto() {
             <div class="wh-presupuesto-fila-nombre">${escapeHTML(v.nombre)}</div>
             <div class="wh-presupuesto-fila-barra-bg">
               <div class="wh-presupuesto-fila-barra-fill" style="width:${anchoBarra}%"></div>
+            </div>
+            <div class="wh-presupuesto-fila-detalle">
+              <span class="wh-presupuesto-fila-cobrado">${escapeHTML(formatMXN(cobrado))}</span>
+              <span class="wh-presupuesto-fila-sep">de</span>
+              <span class="wh-presupuesto-fila-cuota">${escapeHTML(formatMXN(porVendedor))}</span>
             </div>
           </div>
           <div class="wh-presupuesto-fila-pct ${clasePct}">${pct}%</div>
