@@ -5206,7 +5206,7 @@
     <aside class="wh-presupuesto-card" id="whPresupuestoFaltaCard">
       <p class="wh-presupuesto-titulo">Faltante (presupuesto)</p>
       <p class="wh-presupuesto-sub">Total: <span id="whPresupuestoFaltaTotal">$0</span></p>
-      <p class="wh-presupuesto-nota">Nota: lo que le falta a cada quien para llegar a su cuota del presupuesto.</p>
+      <p class="wh-presupuesto-nota">Lo que le falta a cada quien para llegar a su cuota del presupuesto.</p>
       <div class="wh-presupuesto-lista" id="whPresupuestoFaltaLista">
         <!-- Filas generadas por renderWHPresupuesto() -->
       </div>
@@ -9571,7 +9571,7 @@ function crearRegistroMensual(registro) {
         <span class="creditos-campo-valor" data-auto="true" data-campo="total">$0</span>
       </div>
       <div class="creditos-campo">
-        <span class="creditos-campo-label">Efectivo disponible</span>
+        <span class="creditos-campo-label">${empresaActual === 'nmh_baja_sur' ? 'Crédito disponible' : 'Efectivo disponible'}</span>
         <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
       </div>
       <div class="creditos-campo">
@@ -9673,11 +9673,23 @@ async function agregarRegistroMensual() {
   const pagoInicial = anterior ? (anterior.pago || formatMXN(0)) : formatMXN(0);
 
   // La "Deuda neta" del registro anterior se copia como saldo inicial
-  // de la línea "Crédito simple UV" (sigue siendo editable) — es lo que
-  // realmente queda pendiente después de aplicar efectivo/pago del mes
-  // pasado, y a partir de ahí sigue bajando conforme se va abonando.
+  // de la línea "principal" de esa empresa (sigue siendo editable) —
+  // es lo que realmente queda pendiente después de aplicar efectivo/
+  // pago del mes pasado, y a partir de ahí sigue bajando conforme se
+  // va abonando. Cada empresa tiene su propia línea "principal":
+  // Unveil = Crédito simple UV; Warehouse Rentals (nmh_baja_sur) =
+  // Revolvente WH. Si se agrega una empresa nueva a Créditos más
+  // adelante y no está en este mapa, simplemente no copia nada (mismo
+  // comportamiento que antes de este cambio).
+  const LINEA_OBJETIVO_DEUDA_POR_EMPRESA = {
+    unveil: 'crédito simple uv',
+    nmh_baja_sur: 'revolvente wh',
+  };
   if (anterior) {
-    const lineaSimple = lineas.find(l => (l.nombre || '').trim().toLowerCase() === 'crédito simple uv');
+    const nombreObjetivo = LINEA_OBJETIVO_DEUDA_POR_EMPRESA[empresaActual];
+    const lineaSimple = nombreObjetivo
+      ? lineas.find(l => (l.nombre || '').trim().toLowerCase() === nombreObjetivo)
+      : null;
     if (lineaSimple) {
       const valoresAnterior = lineas.map(l => (anterior.saldos && anterior.saldos[l.id] !== undefined) ? parseMXN(anterior.saldos[l.id]) : 0);
       const totalAnterior  = valoresAnterior.reduce((s, v) => s + v, 0);
