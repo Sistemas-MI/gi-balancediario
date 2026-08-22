@@ -5931,7 +5931,15 @@ function actualizarEditabilidadGlobal() {
   document.querySelectorAll('[data-field][contenteditable]').forEach(el => {
     const campo = el.dataset.field || '';
     let bloquear;
-    if (el.hasAttribute('data-rich')) bloquear = debeBloquearNotas;
+    // "Línea de crédito"/"Deuda de la línea de crédito" se calculan
+    // solas a partir de Créditos en Unveil y Warehouse Rentals
+    // (nmh_baja_sur) — ver sincronizarLineaCreditoDesdeCreditos(). Ahí
+    // se bloquean siempre, sin importar rol ni mes; en cualquier otra
+    // empresa (sin Créditos) siguen siendo de captura manual, igual
+    // que antes.
+    if ((campo === 'saldos_linea_credito_monto' || campo === 'saldos_deuda_credito') && empresaTieneCreditos(empresaActual)) {
+      bloquear = true;
+    } else if (el.hasAttribute('data-rich')) bloquear = debeBloquearNotas;
     else if (campo.indexOf('saldo') === 0) bloquear = debeBloquearSaldos;
     else bloquear = debeBloquear;
     el.setAttribute('contenteditable', bloquear ? 'false' : 'true');
@@ -7486,6 +7494,49 @@ function recalcularSaldoDisponibleCredito() {
   displayEl.textContent = formatMXN(disponible);
 }
 
+// ── "Línea de crédito" / "Deuda de la línea de crédito" (Saldos),
+// sincronizadas desde Créditos (solo Unveil y Warehouse Rentals /
+// nmh_baja_sur — las dos únicas empresas que tienen tab "Créditos";
+// se reutiliza la misma lista que ya usa el espejo de Grupo Idirin,
+// CREDITOS_GRP_EMPRESAS, en vez de mantener otra lista aparte) ──
+//   Línea de crédito           = Total préstamo bancario del registro
+//                                 mensual MÁS RECIENTE de esa empresa
+//   Deuda de la línea de crédito = su Deuda neta pendiente
+// Para cualquier otra empresa (Idirin Sobera, Bacari Studio — sin
+// Créditos), estos dos campos siguen siendo de captura manual, tal
+// cual funcionaban antes de este cambio.
+function empresaTieneCreditos(empresaId) {
+  return CREDITOS_GRP_EMPRESAS.some(e => e.id === empresaId);
+}
+
+function sincronizarLineaCreditoDesdeCreditos() {
+  const lineaEl = document.querySelector('[data-field="saldos_linea_credito_monto"]');
+  const deudaEl = document.querySelector('[data-field="saldos_deuda_credito"]');
+  if (!lineaEl || !deudaEl) return;
+  if (!empresaTieneCreditos(empresaActual)) return; // otra empresa: se deja tal cual, editable
+
+  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
+  const ultimo = registros.length ? registros[registros.length - 1] : null;
+  if (!ultimo) return; // sin registros mensuales todavía: no se fuerza nada
+
+  const totalPrestamo = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
+  const deudaNeta = totalPrestamo - parseMXN(ultimo.efectivo) - parseMXN(ultimo.pago);
+
+  lineaEl.textContent = formatMXN(totalPrestamo);
+  deudaEl.textContent = formatMXN(deudaNeta);
+  recalcularSaldoDisponibleCredito();
+}
+
+// Se llama al entrar al tab Saldos (desde cambiarTabUnveil/
+// cambiarTabGenerico): si la empresa activa tiene Créditos, trae fresco
+// su registro mensual más reciente y sincroniza — así funciona aunque
+// nunca hayas visitado el tab Créditos en esta sesión.
+async function entrarTabSaldos() {
+  if (!empresaTieneCreditos(empresaActual)) return;
+  await cargarCreditosDesdeSupabase(empresaActual);
+  sincronizarLineaCreditoDesdeCreditos();
+}
+
 function renderSaldos(datos) {
   const cont  = document.getElementById('saldosCont');
   const vacio = document.getElementById('saldosVacio');
@@ -8888,6 +8939,7 @@ function cambiarTabUnveil(tab) {
     actualizarBarrasGastos();
   }
   if (esCreditos) entrarTabCreditos();
+  if (esSaldos) entrarTabSaldos();
 }
 
 // ── Listeners estáticos del módulo (se enganchan una sola vez) ──
@@ -12216,6 +12268,7 @@ function cambiarTabGenerico(tab) {
   if (esAcumulado) entrarTabAcumulado();
   if (esGastos) actualizarBarrasGastos();
   if (esCreditos) entrarTabCreditos();
+  if (esSaldos) entrarTabSaldos();
 }
 
 function initTabsGenerico() {
