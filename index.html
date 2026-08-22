@@ -5029,7 +5029,7 @@
       </div>
       <div class="saldos-resumen-fila">
         <span class="saldos-resumen-label">Saldo disponible línea de crédito</span>
-        <span class="saldos-resumen-monto" contenteditable="true" data-field="saldos_disponible_credito" data-money-opcional="true" data-placeholder="—"></span>
+        <span class="saldos-resumen-monto" id="saldosDisponibleCreditoDisplay" data-auto="true">—</span>
       </div>
     </div>
 
@@ -5485,7 +5485,6 @@ const DEFAULTS = {
   // un campo editable/guardado — ahora es la suma automática de la
   // columna "Saldo" de la tabla (ver recalcularSaldoTotal()).
   saldos_deuda_credito:      '',
-  saldos_disponible_credito: '',
   saldos_linea_credito_monto:'',
 
   // BALANCE DE VENTAS — campos propios, independientes de Balance de
@@ -7463,6 +7462,30 @@ function recalcularSaldoTotal() {
   totalEl.textContent = formatMXN(total);
 }
 
+// "Saldo disponible línea de crédito" ya no se captura a mano: se
+// calcula solo, en vivo, como Línea de crédito − Deuda de la línea de
+// crédito — mismo criterio que "Saldo total" (arriba): si se guardara
+// aparte, correría el riesgo de desincronizarse de esos dos datos
+// reales. Aplica a cualquier empresa que tenga esta sección (Unveil,
+// Warehouse Rentals, y cualquier otra que la use).
+function recalcularSaldoDisponibleCredito() {
+  const displayEl = document.getElementById('saldosDisponibleCreditoDisplay');
+  if (!displayEl) return;
+  const lineaEl = document.querySelector('[data-field="saldos_linea_credito_monto"]');
+  const deudaEl = document.querySelector('[data-field="saldos_deuda_credito"]');
+  // Si ninguno de los dos tiene algo capturado, se deja el guion por
+  // defecto (igual que antes de este cambio) en vez de mostrar "$0"
+  // engañoso para una empresa a la que no le aplica esta sección.
+  const lineaTexto = lineaEl ? lineaEl.textContent.trim() : '';
+  const deudaTexto = deudaEl ? deudaEl.textContent.trim() : '';
+  if (!lineaTexto && !deudaTexto) {
+    displayEl.textContent = '—';
+    return;
+  }
+  const disponible = parseMXN(lineaTexto) - parseMXN(deudaTexto);
+  displayEl.textContent = formatMXN(disponible);
+}
+
 function renderSaldos(datos) {
   const cont  = document.getElementById('saldosCont');
   const vacio = document.getElementById('saldosVacio');
@@ -7597,6 +7620,12 @@ function recalcular() {
   // existe en el DOM (otra empresa), así que es seguro llamarla siempre.
   renderWHPorConseguir();
   renderWHPresupuesto();
+
+  // "Saldo disponible línea de crédito" — se recalcula aquí porque
+  // "Línea de crédito"/"Deuda de la línea de crédito" son campos
+  // normales (data-field) que ya disparan recalcular() en cada tecleo;
+  // así queda igual de "en vivo" que el resto de este bloque.
+  recalcularSaldoDisponibleCredito();
 }
 
 
