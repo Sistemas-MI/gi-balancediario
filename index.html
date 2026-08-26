@@ -1252,6 +1252,15 @@
   body.modo-especial #tabGenericoCreditos,
   body.modo-especial #tabGrupoCreditos { display: inline-block !important; }
 
+  /* Excepción puntual: el rol "wh" sí puede ver el tab "Vendedores"
+     (Cobrado por vendedor) en Warehouse Rentals, además de "Balance
+     Mensual" — de solo lectura, igual que el resto de vista-acotada:
+     [contenteditable] sigue bloqueado por la regla general de arriba
+     (body.modo-vista-acotada [contenteditable]), así que aquí solo se
+     restaura la visibilidad del tab. Misma especificidad/patrón que la
+     excepción de "especial" con Créditos. */
+  body.modo-wh #tabWHVendedores { display: inline-block !important; }
+
   /* Además, dentro de Créditos: el rol "especial" sí puede crear y
      editar "Registro mensual" (Parte B) — "Líneas de crédito" (Parte A)
      se queda de solo lectura para este rol, igual que el resto de
