@@ -3266,6 +3266,12 @@
   /* Subtítulo "Línea de crédito" — mismo look que .sec-label.bold, con
      un poco más de aire arriba porque sigue a la caja de Saldo total */
   .saldos-subtitulo { margin-top: 18px; }
+  /* Unveil: cada tarjeta de línea de crédito (Revolvente UV, Crédito
+     simple UV) repite el mismo patrón subtítulo+resumen que el bloque
+     único de arriba — sin margen extra en la primera para no duplicar
+     el espacio que ya deja "Saldo total". */
+  .saldos-linea-credito-tarjeta:first-child .saldos-subtitulo { margin-top: 18px; }
+  .saldos-linea-credito-tarjeta + .saldos-linea-credito-tarjeta .saldos-subtitulo { margin-top: 22px; }
 
   /* ══════════════════════════════════════════
      SALDOS DEL GRUPO — desglose por empresa
@@ -5035,21 +5041,36 @@
       </div>
     </div>
 
-    <p class="sec-label bold saldos-subtitulo">Línea de crédito</p>
-    <div class="saldos-resumen">
-      <div class="saldos-resumen-fila">
-        <span class="saldos-resumen-label">Línea de crédito</span>
-        <span class="saldos-resumen-monto" contenteditable="true" data-field="saldos_linea_credito_monto" data-money-opcional="true" data-placeholder="$0"></span>
-      </div>
-      <div class="saldos-resumen-fila">
-        <span class="saldos-resumen-label">Deuda de la línea de crédito</span>
-        <span class="saldos-resumen-monto" contenteditable="true" data-field="saldos_deuda_credito" data-money-opcional="true" data-placeholder="—"></span>
-      </div>
-      <div class="saldos-resumen-fila">
-        <span class="saldos-resumen-label">Saldo disponible línea de crédito</span>
-        <span class="saldos-resumen-monto" id="saldosDisponibleCreditoDisplay" data-auto="true">—</span>
+    <!-- Bloque único "Línea de crédito" — se usa para Warehouse Rentals
+         (nmh_baja_sur, sincronizado en automático, una sola línea) y
+         para Idirin Sobera / Bacari Studio (captura 100% manual, sin
+         tab Créditos). Unveil ya NO usa este bloque — ver el contenedor
+         de abajo, con sus dos tarjetas propias. -->
+    <div id="saldosLineaCreditoDefaultWrap">
+      <p class="sec-label bold saldos-subtitulo">Línea de crédito</p>
+      <div class="saldos-resumen">
+        <div class="saldos-resumen-fila">
+          <span class="saldos-resumen-label">Línea de crédito</span>
+          <span class="saldos-resumen-monto" contenteditable="true" data-field="saldos_linea_credito_monto" data-money-opcional="true" data-placeholder="$0"></span>
+        </div>
+        <div class="saldos-resumen-fila">
+          <span class="saldos-resumen-label">Deuda de la línea de crédito</span>
+          <span class="saldos-resumen-monto" contenteditable="true" data-field="saldos_deuda_credito" data-money-opcional="true" data-placeholder="—"></span>
+        </div>
+        <div class="saldos-resumen-fila">
+          <span class="saldos-resumen-label">Saldo disponible línea de crédito</span>
+          <span class="saldos-resumen-monto" id="saldosDisponibleCreditoDisplay" data-auto="true">—</span>
+        </div>
       </div>
     </div>
+
+    <!-- Unveil: una tarjeta POR CADA línea de crédito que tenga capturada
+         en el tab Créditos (hoy: Revolvente UV + Crédito simple UV) —
+         cada una sincronizada en automático desde su propio historial,
+         mismo criterio que ya usa Warehouse Rentals arriba. Generado por
+         JS: ver renderLineasCreditoSaldosUnveil(). -->
+    <div id="saldosLineaCreditoUnveilCont" style="display:none"></div>
+
 
   </div><!-- /panelSaldos -->
 
@@ -7533,26 +7554,110 @@ function sincronizarLineaCreditoDesdeCreditos() {
   // es exactamente el mismo comportamiento que ya existía.
   const lineaPrincipal = (lineasCreditoPorEmpresa[empresaActual] || [])[0];
   if (!lineaPrincipal) return;
-  const registros = registrosMensualesPorLinea[lineaPrincipal.id] || [];
-  const ultimo = registros.length ? registros[registros.length - 1] : null;
-  if (!ultimo) return; // sin registros mensuales todavía: no se fuerza nada
+  const sync = calcularSincroniaLinea(lineaPrincipal.id);
+  if (!sync) return; // sin registros mensuales todavía: no se fuerza nada
 
-  const totalPrestamo = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
-  const deudaNeta = totalPrestamo - parseMXN(ultimo.efectivo) - parseMXN(ultimo.pago);
-
-  lineaEl.textContent = formatMXN(totalPrestamo);
-  deudaEl.textContent = formatMXN(deudaNeta);
+  lineaEl.textContent = formatMXN(sync.monto);
+  deudaEl.textContent = formatMXN(sync.deuda);
   recalcularSaldoDisponibleCredito();
 }
 
+// A partir del historial de UNA línea de crédito (registrosMensualesPorLinea),
+// calcula su "Línea de crédito" (Total préstamo del registro más
+// reciente) y su "Deuda de la línea de crédito" (Deuda neta pendiente).
+// Devuelve null si esa línea todavía no tiene ningún registro mensual
+// capturado en el tab Créditos — así el que llama decide qué mostrar
+// (guion, o simplemente no forzar nada).
+function calcularSincroniaLinea(lineaId) {
+  const registros = registrosMensualesPorLinea[lineaId] || [];
+  const ultimo = registros.length ? registros[registros.length - 1] : null;
+  if (!ultimo) return null;
+  const monto = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
+  const deuda = monto - parseMXN(ultimo.efectivo) - parseMXN(ultimo.pago);
+  return { monto, deuda };
+}
+
+// Arma UNA tarjeta de "Línea de crédito" para una línea de Unveil —
+// mismo layout que el bloque único de arriba (Línea de crédito / Deuda
+// / Saldo disponible), pero de solo lectura (data-auto, sin
+// contenteditable): el dato real vive en el tab Créditos, aquí solo se
+// refleja, para no tener dos lugares donde pueda desincronizarse.
+function crearTarjetaLineaCreditoSaldos(linea) {
+  const wrap = document.createElement('div');
+  wrap.className = 'saldos-linea-credito-tarjeta';
+  wrap.innerHTML = `
+    <p class="sec-label bold saldos-subtitulo">Línea de crédito — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
+    <div class="saldos-resumen">
+      <div class="saldos-resumen-fila">
+        <span class="saldos-resumen-label">Línea de crédito</span>
+        <span class="saldos-resumen-monto" data-auto="true">—</span>
+      </div>
+      <div class="saldos-resumen-fila">
+        <span class="saldos-resumen-label">Deuda de la línea de crédito</span>
+        <span class="saldos-resumen-monto" data-auto="true">—</span>
+      </div>
+      <div class="saldos-resumen-fila">
+        <span class="saldos-resumen-label">Saldo disponible línea de crédito</span>
+        <span class="saldos-resumen-monto" data-auto="true">—</span>
+      </div>
+    </div>`;
+
+  const [montoEl, deudaEl, dispEl] = wrap.querySelectorAll('.saldos-resumen-monto');
+  const sync = calcularSincroniaLinea(linea.id);
+  if (sync) {
+    montoEl.textContent = formatMXN(sync.monto);
+    deudaEl.textContent = formatMXN(sync.deuda);
+    dispEl.textContent  = formatMXN(sync.monto - sync.deuda);
+  } else {
+    montoEl.textContent = '—';
+    deudaEl.textContent = '—';
+    dispEl.textContent  = '—';
+  }
+  return wrap;
+}
+
+// Alterna entre el bloque único (WH / Idirin Sobera / Bacari Studio) y
+// las tarjetas por línea (Unveil) según la empresa activa, y repinta
+// estas últimas con lo más reciente de Créditos. Se llama al entrar al
+// tab Saldos y cada vez que cambia algo en Créditos que pudiera afectar
+// estos montos.
+function renderLineasCreditoSaldosUnveil() {
+  const cont = document.getElementById('saldosLineaCreditoUnveilCont');
+  const wrapDefault = document.getElementById('saldosLineaCreditoDefaultWrap');
+  if (!cont || !wrapDefault) return;
+
+  if (empresaActual !== 'unveil') {
+    cont.style.display = 'none';
+    cont.innerHTML = '';
+    wrapDefault.style.display = '';
+    return;
+  }
+
+  wrapDefault.style.display = 'none';
+  cont.style.display = '';
+  cont.innerHTML = '';
+  const lineas = lineasCreditoPorEmpresa.unveil || [];
+  if (lineas.length === 0) {
+    cont.innerHTML = '<p class="creditos-vacio">Sin líneas de crédito capturadas en el tab Créditos todavía</p>';
+    return;
+  }
+  lineas.forEach(l => cont.appendChild(crearTarjetaLineaCreditoSaldos(l)));
+}
+
 // Se llama al entrar al tab Saldos (desde cambiarTabUnveil/
-// cambiarTabGenerico): si la empresa activa sincroniza desde Créditos,
-// trae fresco su registro mensual más reciente y sincroniza — así
-// funciona aunque nunca hayas visitado el tab Créditos en esta sesión.
+// cambiarTabGenerico): Unveil y Warehouse Rentals (las dos únicas
+// empresas con tab Créditos) traen fresco su historial y se sincronizan
+// — así funciona aunque nunca hayas visitado el tab Créditos en esta
+// sesión. Para cualquier otra empresa, solo se asegura de que las
+// tarjetas de Unveil queden ocultas (por si vienes de ahí).
 async function entrarTabSaldos() {
-  if (!empresaSincronizaSaldosDesdeCreditos(empresaActual)) return;
-  await cargarCreditosDesdeSupabase(empresaActual);
-  sincronizarLineaCreditoDesdeCreditos();
+  if (empresaActual === 'unveil') {
+    await cargarCreditosDesdeSupabase('unveil');
+  } else if (empresaSincronizaSaldosDesdeCreditos(empresaActual)) {
+    await cargarCreditosDesdeSupabase(empresaActual);
+    sincronizarLineaCreditoDesdeCreditos();
+  }
+  renderLineasCreditoSaldosUnveil();
 }
 
 function renderSaldos(datos) {
