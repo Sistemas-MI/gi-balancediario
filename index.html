@@ -7564,16 +7564,18 @@ function sincronizarLineaCreditoDesdeCreditos() {
 
 // A partir del historial de UNA línea de crédito (registrosMensualesPorLinea),
 // calcula su "Línea de crédito" (Total préstamo del registro más
-// reciente) y su "Deuda de la línea de crédito" (Deuda neta pendiente).
-// Devuelve null si esa línea todavía no tiene ningún registro mensual
-// capturado en el tab Créditos — así el que llama decide qué mostrar
-// (guion, o simplemente no forzar nada).
+// reciente) y su "Deuda de la línea de crédito" (Deuda neta pendiente:
+// Saldo − Pago capital — "Crédito disponible" ya no resta aquí, ver
+// calcularDeudaDeRegistro en el tab Créditos). Devuelve null si esa
+// línea todavía no tiene ningún registro mensual capturado en el tab
+// Créditos — así el que llama decide qué mostrar (guion, o simplemente
+// no forzar nada).
 function calcularSincroniaLinea(lineaId) {
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const ultimo = registros.length ? registros[registros.length - 1] : null;
   if (!ultimo) return null;
   const monto = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
-  const deuda = monto - parseMXN(ultimo.efectivo) - parseMXN(ultimo.pago);
+  const deuda = monto - parseMXN(ultimo.pago);
   return { monto, deuda };
 }
 
@@ -9518,28 +9520,14 @@ let registrosMensualesPorLinea = {};
 // cada registro de este mapa tiene una sola llave: la de su propia línea.
 
 // A qué empresa pertenece una línea de crédito, buscando en las dos
-// listas (unveil / nmh_baja_sur). Se usa para decidir si "Efectivo/
-// Crédito disponible" resta o no en la Deuda neta (ver siguiente
-// función) sin depender de que empresaActual esté bien puesto en ese
-// momento — más seguro para el espejo de Grupo Idirin, que carga las
-// dos empresas a la vez.
+// listas (unveil / nmh_baja_sur). Se usa para ubicar el "monto" (límite)
+// de la línea al auto-calcular "Crédito disponible" — ver
+// actualizarCreditoDisponible más abajo.
 function empresaDeLinea(lineaId) {
   for (const emp in lineasCreditoPorEmpresa) {
     if ((lineasCreditoPorEmpresa[emp] || []).some(l => l.id === lineaId)) return emp;
   }
   return null;
-}
-
-// Indica si el campo "Efectivo/Crédito disponible" de una línea debe
-// restarse al calcular su Deuda neta. En Warehouse Rentals (nmh_baja_sur)
-// ya NO aplica: "Crédito disponible" pasó a ser un dato auto-calculado
-// e informativo (límite de la línea − Deuda neta, ver
-// actualizarCreditoDisponibleWH) — no es efectivo real que se abone
-// contra la deuda, así que no se resta. En el resto de las empresas
-// (Unveil, etc.) "Efectivo disponible" sigue siendo dinero real
-// disponible para pagar, así que ahí sí se resta, como siempre.
-function lineaRestaEfectivoEnDeuda(lineaId) {
-  return empresaDeLinea(lineaId) !== 'nmh_baja_sur';
 }
 
 // ── Persistencia (Supabase) ──
@@ -9803,13 +9791,13 @@ function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
   valorEl.addEventListener('input', () => {
     registro.saldos[lineaId] = valorEl.textContent;
     recalcularRegistroMensual(card, registro);
-    actualizarCreditoDisponibleWH(card, registro);
+    actualizarCreditoDisponible(card, registro);
   });
   valorEl.addEventListener('blur', () => {
     valorEl.textContent = formatMXN(parseMXN(valorEl.textContent));
     registro.saldos[lineaId] = valorEl.textContent;
     recalcularRegistroMensual(card, registro);
-    actualizarCreditoDisponibleWH(card, registro);
+    actualizarCreditoDisponible(card, registro);
     guardarRegistroMensual(registro);
   });
 }
@@ -9827,7 +9815,7 @@ function crearRegistroMensual(registro) {
         <span class="creditos-campo-valor" data-auto="true" data-campo="total">$0</span>
       </div>
       <div class="creditos-campo">
-        <span class="creditos-campo-label">${empresaActual === 'nmh_baja_sur' ? 'Crédito disponible' : 'Efectivo disponible'}</span>
+        <span class="creditos-campo-label">Crédito disponible</span>
         <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
       </div>
       <div class="creditos-campo">
@@ -9865,33 +9853,31 @@ function crearRegistroMensual(registro) {
     el.addEventListener('input', () => {
       registro[campo] = el.textContent;
       recalcularRegistroMensual(card, registro);
-      if (campo === 'pago') actualizarCreditoDisponibleWH(card, registro);
+      if (campo === 'pago') actualizarCreditoDisponible(card, registro);
     });
     el.addEventListener('blur', () => {
       el.textContent = formatMXN(parseMXN(el.textContent));
       registro[campo] = el.textContent;
       recalcularRegistroMensual(card, registro);
-      if (campo === 'pago') actualizarCreditoDisponibleWH(card, registro);
+      if (campo === 'pago') actualizarCreditoDisponible(card, registro);
       guardarRegistroMensual(registro);
     });
   });
 
   card.querySelector('.creditos-registro-remove').addEventListener('click', () => quitarRegistroMensual(registro.id, registro.lineaId));
   recalcularRegistroMensual(card, registro);
-  actualizarCreditoDisponibleWH(card, registro);
+  actualizarCreditoDisponible(card, registro);
   return card;
 }
 
-// Deuda neta de un registro: su saldo, menos Pago capital, y — salvo en
-// Warehouse Rentals (ver lineaRestaEfectivoEnDeuda) — menos Efectivo
-// disponible. Misma fórmula que recalcularRegistroMensual() calcula a
-// partir del DOM.
+// Deuda neta de un registro: su saldo, menos Pago capital — "Crédito
+// disponible" ya no participa aquí (ver actualizarCreditoDisponible: es
+// al revés, se calcula A PARTIR de esta Deuda neta). Misma fórmula que
+// recalcularRegistroMensual() calcula a partir del DOM.
 function calcularDeudaDeRegistro(registro) {
   const totalSaldos = Object.values((registro && registro.saldos) || {}).reduce((s, v) => s + parseMXN(v), 0);
   const pago = parseMXN(registro && registro.pago);
-  const restaEfectivo = registro && lineaRestaEfectivoEnDeuda(registro.lineaId);
-  const efectivo = restaEfectivo ? parseMXN(registro && registro.efectivo) : 0;
-  return totalSaldos - efectivo - pago;
+  return totalSaldos - pago;
 }
 
 function recalcularRegistroMensual(card, registro) {
@@ -9899,10 +9885,8 @@ function recalcularRegistroMensual(card, registro) {
   card.querySelectorAll('.creditos-campo-saldo [data-linea]').forEach(el => {
     totalSaldos += parseMXN(el.textContent);
   });
-  const pago = parseMXN(card.querySelector('[data-campo="pago"]').textContent);
-  const restaEfectivo = lineaRestaEfectivoEnDeuda(registro.lineaId);
-  const efectivo = restaEfectivo ? parseMXN(card.querySelector('[data-campo="efectivo"]').textContent) : 0;
-  const deuda = totalSaldos - efectivo - pago;
+  const pago  = parseMXN(card.querySelector('[data-campo="pago"]').textContent);
+  const deuda = totalSaldos - pago;
 
   card.querySelector('[data-campo="total"]').textContent = formatMXN(totalSaldos);
   card.querySelector('[data-campo="deuda"]').textContent = formatMXN(deuda);
@@ -9910,26 +9894,25 @@ function recalcularRegistroMensual(card, registro) {
   renderSeguimientoLinea(registro.lineaId);
 }
 
-// Solo para Warehouse Rentals (Revolvente WH): "Crédito disponible" ya
-// NO es un dato que se escriba a mano para que reste en la Deuda neta
-// — es al revés, se AUTO-CALCULA como el límite de esa línea (su
-// "monto" capturado en Líneas de crédito) menos la Deuda neta que se
-// acaba de resolver — mismo criterio que "Saldo disponible línea de
-// crédito" en el tab Saldos. El campo sigue siendo editable (por si
+// "Crédito disponible" (Revolvente UV, Crédito simple UV, Revolvente
+// WH — las tres) ya NO es un dato que se escriba a mano para que reste
+// en la Deuda neta — es al revés, se AUTO-CALCULA como el límite de esa
+// línea (su "monto" capturado en Líneas de crédito) menos la Deuda neta
+// que se acaba de resolver — mismo criterio que "Saldo disponible línea
+// de crédito" en el tab Saldos. El campo sigue siendo editable (por si
 // algún día hace falta ajustarlo a mano), pero se recalcula solo cada
 // vez que cambian el Saldo o el Pago capital — nunca se dispara desde
 // su propio campo, para no pisar lo que estés escribiendo ahí mismo.
-function actualizarCreditoDisponibleWH(card, registro) {
-  if (lineaRestaEfectivoEnDeuda(registro.lineaId)) return; // no es Revolvente WH: no aplica
-  const efectivoEl = card.querySelector('[data-campo="efectivo"]');
-  if (!efectivoEl) return;
+function actualizarCreditoDisponible(card, registro) {
+  const disponibleEl = card.querySelector('[data-campo="efectivo"]');
+  if (!disponibleEl) return;
   const deuda = parseMXN(card.querySelector('[data-campo="deuda"]').textContent);
   const empresaId = empresaDeLinea(registro.lineaId);
   const lineaObj = (lineasCreditoPorEmpresa[empresaId] || []).find(l => l.id === registro.lineaId);
   const limite = parseMXN(lineaObj ? lineaObj.monto : 0);
   const disponible = limite - deuda;
-  efectivoEl.textContent = formatMXN(disponible);
-  registro.efectivo = efectivoEl.textContent;
+  disponibleEl.textContent = formatMXN(disponible);
+  registro.efectivo = disponibleEl.textContent;
 }
 
 // ═══ Un módulo (Registro mensual + Seguimiento) POR CADA línea de
@@ -9950,14 +9933,13 @@ function crearModuloLinea(linea) {
   const wrap = document.createElement('div');
   wrap.className = 'creditos-linea-modulo';
   wrap.dataset.lineaId = linea.id;
-  const labelDisponible = empresaActual === 'nmh_baja_sur' ? 'crédito disponible' : 'efectivo disponible';
   wrap.innerHTML = `
     <div class="ornamento">— · —</div>
     <div class="sec-header-row">
       <p class="sec-label bold" style="margin:0">Registro mensual — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
       <button class="btn-add-circular btn-agregar-registro-linea" type="button" title="Agregar registro del mes">+</button>
     </div>
-    <p class="creditos-parte-nota">Uno por mes: el saldo de esta línea, más ${labelDisponible} y Pago capital.</p>
+    <p class="creditos-parte-nota">Uno por mes: el saldo de esta línea y Pago capital — Crédito disponible se calcula solo.</p>
     <div class="registros-mensuales-linea-cont"></div>
     <p class="creditos-vacio registros-mensuales-linea-vacio">Sin registros mensuales — dale al "+" para agregar el de este mes</p>
     <p class="sec-label bold" style="margin:16px 0 2px">Seguimiento mes a mes — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
@@ -9983,16 +9965,13 @@ async function agregarRegistroMensual(lineaId) {
   const anterior = lista.length ? lista[lista.length - 1] : null;
 
   // El nuevo registro arranca con el saldo igual a la Deuda neta que
-  // dejó el registro anterior de ESTA MISMA línea (lo que realmente
-  // queda pendiente después de aplicar Pago capital —y, salvo en
-  // Warehouse Rentals, también Efectivo disponible— del mes pasado) —
-  // y a partir de ahí sigue bajando conforme se va abonando. Pago
-  // capital SIEMPRE arranca en $0.00 (se captura a mano cada mes). El
-  // campo "efectivo" también arranca en $0.00 aquí, pero para
-  // Warehouse Rentals se sobreescribe de inmediato más abajo
-  // (crearRegistroMensual → actualizarCreditoDisponibleWH) con el
-  // valor auto-calculado; en el resto de empresas sigue siendo 100%
-  // manual, como siempre.
+  // dejó el registro anterior de ESTA MISMA línea (Saldo − Pago capital
+  // del mes pasado) — y a partir de ahí sigue bajando conforme se va
+  // abonando. Pago capital SIEMPRE arranca en $0.00 (se captura a mano
+  // cada mes). El campo "efectivo" (Crédito disponible) también arranca
+  // en $0.00 aquí, pero se sobreescribe de inmediato más abajo
+  // (crearRegistroMensual → actualizarCreditoDisponible) con su valor
+  // auto-calculado: límite de la línea − Deuda neta.
   const saldoInicial = anterior ? formatMXN(calcularDeudaDeRegistro(anterior)) : formatMXN(0);
 
   const registro = {
@@ -10104,12 +10083,11 @@ function creditosGrpEtiquetas() {
 // Crédito simple UV y Revolvente WH se vean cada una con su propio
 // historial, sin mezclarse entre sí.
 function construirTablaSeguimientoLineaHTML(lineaId) {
-  let linea = null, empresaId = null;
+  let linea = null;
   for (const emp in lineasCreditoPorEmpresa) {
     const encontrada = (lineasCreditoPorEmpresa[emp] || []).find(l => l.id === lineaId);
-    if (encontrada) { linea = encontrada; empresaId = emp; break; }
+    if (encontrada) { linea = encontrada; break; }
   }
-  const labelDisponible = empresaId === 'nmh_baja_sur' ? 'Crédito disponible' : 'Efectivo disponible';
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
@@ -10120,18 +10098,16 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
     const saldo = f.esReg
       ? (f.registro.saldos && f.registro.saldos[lineaId] !== undefined ? parseMXN(f.registro.saldos[lineaId]) : 0)
       : parseMXN(linea ? linea.monto : 0);
-    const efectivo = f.esReg ? parseMXN(f.registro.efectivo) : null;
-    const pago      = f.esReg ? parseMXN(f.registro.pago) : null;
-    // Deuda neta histórica: misma regla que en el registro en vivo — en
-    // Warehouse Rentals "Crédito disponible" no resta (ver
-    // lineaRestaEfectivoEnDeuda), en el resto de empresas sí.
-    const efectivoRestaAqui = lineaRestaEfectivoEnDeuda(lineaId) ? (efectivo || 0) : 0;
-    const deuda     = f.esReg ? saldo - efectivoRestaAqui - (pago || 0) : saldo;
+    const disponible = f.esReg ? parseMXN(f.registro.efectivo) : null;
+    const pago       = f.esReg ? parseMXN(f.registro.pago) : null;
+    // Deuda neta histórica: misma regla que en el registro en vivo —
+    // "Crédito disponible" ya no resta (ver calcularDeudaDeRegistro).
+    const deuda = f.esReg ? saldo - (pago || 0) : saldo;
     return `
       <tr>
         <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
         <td>${escapeHTML(formatMXN(saldo))}</td>
-        <td>${efectivo === null ? '—' : escapeHTML(formatMXN(efectivo))}</td>
+        <td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>
         <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
         <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
       </tr>`;
@@ -10144,7 +10120,7 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
           <tr>
             <th class="grp-acum-matrix-empresa">Mes</th>
             <th>Saldo</th>
-            <th>${labelDisponible}</th>
+            <th>Crédito disponible</th>
             <th>Pago capital</th>
             <th>Deuda neta pendiente</th>
           </tr>
@@ -10200,29 +10176,24 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
     ? lineasEmp.map(l => { const r = registroDeLinea(l.id, f.etiqueta); return r && r.saldos && r.saldos[l.id] !== undefined ? parseMXN(r.saldos[l.id]) : null; })
     : lineasEmp.map(l => parseMXN(l.monto));
 
-  // Efectivo/Pago capital combinados: suma de lo capturado en CADA
-  // línea de esta empresa para ese mes (cada línea ya guarda lo suyo
-  // por separado, así que aquí sí se suman sin riesgo de doble conteo).
-  // "Efectivo/Crédito disponible" solo se suma para líneas donde de
-  // verdad resta en la Deuda neta (ver lineaRestaEfectivoEnDeuda) — en
-  // Warehouse Rentals ya no aplica.
-  const efectivoPagoDeFila = (f) => {
-    if (!f.esReg) return { efectivo: 0, pago: 0 };
-    return lineasEmp.reduce((acc, l) => {
+  // Pago capital combinado: suma de lo capturado en CADA línea de esta
+  // empresa para ese mes (cada línea ya guarda lo suyo por separado, así
+  // que aquí sí se suma sin riesgo de doble conteo). "Crédito
+  // disponible" ya no participa en la Deuda neta (ver
+  // calcularDeudaDeRegistro), así que aquí ya no se suma.
+  const pagoDeFila = (f) => {
+    if (!f.esReg) return 0;
+    return lineasEmp.reduce((s, l) => {
       const r = registroDeLinea(l.id, f.etiqueta);
-      if (r) {
-        if (lineaRestaEfectivoEnDeuda(l.id)) acc.efectivo += parseMXN(r.efectivo);
-        acc.pago += parseMXN(r.pago);
-      }
-      return acc;
-    }, { efectivo: 0, pago: 0 });
+      return s + (r ? parseMXN(r.pago) : 0);
+    }, 0);
   };
 
   const filasHTML = filas.map(f => {
     const valores = valoresDeFila(f);
     const total   = valores.reduce((s, v) => s + (v || 0), 0);
-    const { efectivo, pago } = efectivoPagoDeFila(f);
-    const deuda   = f.esReg ? total - efectivo - pago : total;
+    const pago    = pagoDeFila(f);
+    const deuda   = f.esReg ? total - pago : total;
     const pagoCapital = f.esReg ? pago : null;
     return `
       <tr>
@@ -10327,19 +10298,16 @@ async function entrarTabCreditosGrupo() {
       const reg = registroDe(c.id, etiqueta);
       return reg && reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : null;
     });
-    // Efectivo disponible y Pago capital combinados: ahora que cada
-    // línea guarda lo suyo por separado, se suman sin riesgo de doble
-    // conteo (antes se tomaba de un solo registro por empresa porque
-    // ahí sí era un valor único compartido entre sus líneas). "Efectivo/
-    // Crédito disponible" solo se suma para líneas donde de verdad resta
-    // en la Deuda neta (ver lineaRestaEfectivoEnDeuda) — en Warehouse
-    // Rentals (Revolvente WH) ya no aplica: es un dato auto-calculado e
-    // informativo, no dinero real aplicado contra la deuda.
+    // Crédito disponible combinado: suma de lo que cada línea trae
+    // auto-calculado (puramente informativo, ya no resta en la Deuda
+    // neta — ver calcularDeudaDeRegistro). Pago capital combinado: suma
+    // de lo capturado en cada línea (cada una guarda lo suyo por
+    // separado, así que aquí sí se suma sin riesgo de doble conteo).
     let efectivo = 0, pago = 0;
     columnas.forEach(c => {
       const reg = registroDe(c.id, etiqueta);
       if (reg) {
-        if (lineaRestaEfectivoEnDeuda(c.id)) efectivo += parseMXN(reg.efectivo);
+        efectivo += parseMXN(reg.efectivo);
         pago += parseMXN(reg.pago);
       }
     });
@@ -10352,7 +10320,7 @@ async function entrarTabCreditosGrupo() {
     const total = totalDe(fila.celdas);
     const efectivo = fila.esOriginal ? null : fila.efectivo;
     const pago      = fila.esOriginal ? null : fila.pago;
-    const deuda     = fila.esOriginal ? total : total - efectivo - pago;
+    const deuda     = fila.esOriginal ? total : total - pago;
     const etiquetaTxt = fila.esOriginal ? 'Monto original' : fila.etiqueta;
     return `
       <tr>
@@ -10373,7 +10341,7 @@ async function entrarTabCreditosGrupo() {
             <th class="grp-acum-matrix-empresa">—</th>
             ${columnas.map(c => `<th>${escapeHTML(c.nombre || 'Línea')}</th>`).join('')}
             <th>Total préstamo</th>
-            <th>Efectivo disp.</th>
+            <th>Crédito disp.</th>
             <th>Pago capital</th>
             <th>Deuda neta</th>
           </tr>
