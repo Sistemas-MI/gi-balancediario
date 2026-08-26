@@ -411,7 +411,7 @@
     padding: 18px 0;
   }
   #lineasCreditoCont:not(:empty) ~ #lineasCreditoVacio,
-  #registrosMensualesCont:not(:empty) ~ #registrosMensualesVacio { display: none; }
+  .registros-mensuales-linea-cont:not(:empty) ~ .registros-mensuales-linea-vacio { display: none; }
 
   .credito-registro-card {
     position: relative;
@@ -629,8 +629,17 @@
 
   /* ── Tabla de seguimiento (mes a mes) reutilizada en Grupo Idirin y
      dentro del tab de cada empresa — mismos tokens que .grp-acum-matrix. ── */
-  #seguimientoCreditoCont { margin-top: 4px; }
-  #seguimientoCreditoCont .creditos-vacio { text-align: left; padding: 6px 0; }
+  .seguimiento-linea-cont { margin-top: 4px; }
+  .seguimiento-linea-cont .creditos-vacio { text-align: left; padding: 6px 0; }
+
+  /* ── Módulo independiente de Registro mensual + Seguimiento por CADA
+     línea de crédito (Parte B+C) — antes era un único bloque compartido
+     por empresa que mezclaba los saldos de todas sus líneas en una
+     misma fila; ahora cada línea (ej. "Revolvente UV", "Crédito simple
+     UV") tiene su propio historial mensual independiente, exactamente
+     con la misma estructura que ya tenía "Revolvente WH" (que nunca
+     tuvo el problema por ser la única línea de esa empresa). ── */
+  .creditos-linea-modulo:first-child .ornamento { display: none; }
 
   /* ── PLAN ── */
   .plan-lista {
@@ -1266,19 +1275,19 @@
      se queda de solo lectura para este rol, igual que el resto de
      vista-acotada. Mismo criterio de especificidad que arriba: mismo
      selector base que la regla general, va después → gana. */
-  body.modo-especial #btnAgregarRegistroMensual {
+  body.modo-especial .btn-agregar-registro-linea {
     display: flex !important;
     pointer-events: auto !important;
   }
-  body.modo-especial #registrosMensualesCont [contenteditable] {
+  body.modo-especial .registros-mensuales-linea-cont [contenteditable] {
     pointer-events: auto !important;
     cursor: text !important;
     -webkit-user-modify: read-write !important;
   }
-  body.modo-especial #registrosMensualesCont [contenteditable]:focus {
+  body.modo-especial .registros-mensuales-linea-cont [contenteditable]:focus {
     background: rgba(92,46,26,.05) !important;
   }
-  body.modo-especial #registrosMensualesCont .credito-row-remove {
+  body.modo-especial .registros-mensuales-linea-cont .credito-row-remove {
     display: flex !important;
     pointer-events: auto !important;
   }
@@ -4610,7 +4619,7 @@
     <!-- PANEL CRÉDITOS (Grupo Idirin) — sin botones de agregar/quitar,
          sin campos editables: solo espejo de lo que ya está capturado
          en Unveil y en NMH Baja Sur (lineasCreditoPorEmpresa /
-         registrosMensualesPorEmpresa). Puramente visual e informativo,
+         registrosMensualesPorLinea). Puramente visual e informativo,
          a petición explícita. -->
     <div id="panelGrupoCreditos" style="display:none">
       <p class="sec-label bold" style="margin-bottom:2px">Créditos bancarios — Grupo</p>
@@ -5073,22 +5082,14 @@
 
     <div class="ornamento">— · —</div>
 
-    <!-- PARTE B: Registro mensual -->
-    <div class="sec-header-row">
-      <p class="sec-label bold" style="margin:0">Registro mensual</p>
-      <button class="btn-add-circular" id="btnAgregarRegistroMensual" type="button" title="Agregar registro del mes">+</button>
-    </div>
-    <p class="creditos-parte-nota">Uno por mes: el saldo actual de cada línea de crédito, más efectivo disponible y Pago capital.</p>
-    <div id="registrosMensualesCont"></div>
-    <p class="creditos-vacio" id="registrosMensualesVacio">Sin registros mensuales — dale al "+" para agregar el de este mes</p>
-
-    <div class="ornamento">— · —</div>
-
-    <!-- PARTE C: Seguimiento — misma tabla que ve Grupo Idirin, para
-         que dentro de la propia empresa también se vea de un vistazo
-         cómo baja la deuda mes con mes. -->
-    <p class="sec-label bold" style="margin:0 0 2px">Seguimiento mes a mes</p>
-    <div id="seguimientoCreditoCont"></div>
+    <!-- PARTES B+C: un módulo independiente de Registro mensual +
+         Seguimiento POR CADA línea de crédito — cada línea lleva su
+         propio historial mensual (saldo, efectivo/crédito disponible,
+         Pago capital, Total y Deuda neta), sin mezclarse con las demás
+         líneas de la misma empresa. Generado por JS: ver
+         entrarModulosLineasCredito()/crearModuloLinea(). -->
+    <div id="creditosLineasModulosCont"></div>
+    <p class="creditos-vacio" id="creditosLineasModulosVacio">Agrega una línea de crédito arriba para empezar a capturar su registro mensual</p>
   </div><!-- /panelCreditosBancarios -->
 
   <!-- PANEL RENTABILIDAD DE EVENTOS (solo UNVEIL) -->
@@ -7526,7 +7527,13 @@ function sincronizarLineaCreditoDesdeCreditos() {
   if (!lineaEl || !deudaEl) return;
   if (!empresaSincronizaSaldosDesdeCreditos(empresaActual)) return; // otra empresa: se deja tal cual, editable
 
-  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
+  // Warehouse Rentals (nmh_baja_sur) tiene una sola línea de crédito
+  // (Revolvente WH) — se toma su historial mensual. Si algún día se le
+  // agrega una segunda línea, esto tomaría solo la primera; por ahora
+  // es exactamente el mismo comportamiento que ya existía.
+  const lineaPrincipal = (lineasCreditoPorEmpresa[empresaActual] || [])[0];
+  if (!lineaPrincipal) return;
+  const registros = registrosMensualesPorLinea[lineaPrincipal.id] || [];
   const ultimo = registros.length ? registros[registros.length - 1] : null;
   if (!ultimo) return; // sin registros mensuales todavía: no se fuerza nada
 
@@ -9377,22 +9384,33 @@ function entrarTabAcumulado() {
 //        Deuda neta = Total − Efectivo disponible − Pago capital
 //
 // Grupo Idirin no tiene su propia versión editable: arma un espejo
-// combinado leyendo lineasCreditoPorEmpresa / registrosMensualesPorEmpresa
+// combinado leyendo lineasCreditoPorEmpresa / registrosMensualesPorLinea
 // de unveil y nmh_baja_sur (Warehouse Rentals).
 //
 // PERSISTENCIA: viven en dos tablas propias de Supabase —
 // credito_lineas y credito_registros — en vez de balance_diario, porque
 // las líneas de crédito NO son mensuales (no tiene sentido atarlas a un
 // anio/mes: se crean una vez y valen para siempre). Cada objeto en
-// memoria (lineasCreditoPorEmpresa / registrosMensualesPorEmpresa) es la
+// memoria (lineasCreditoPorEmpresa / registrosMensualesPorLinea) es la
 // copia de trabajo que edita la interfaz; toda edición se manda también
 // a Supabase con guardarLineaCredito()/guardarRegistroMensual(), y al
 // entrar al tab se recarga fresco con cargarCreditosDesdeSupabase().
 
 let lineasCreditoPorEmpresa = { unveil: [], nmh_baja_sur: [] };
 // cada línea: { id, nombre, monto, fechaCredito, fechaCorte, fechaPago, tasa, plazo, clausula, terminacion }
-let registrosMensualesPorEmpresa = { unveil: [], nmh_baja_sur: [] };
-// cada registro: { id, etiqueta, efectivo, pago, saldos: { [lineaId]: valorTexto } }
+
+// Registro mensual: uno por LÍNEA de crédito (no por empresa) — así,
+// dentro de una misma empresa con varias líneas (ej. Unveil: "Revolvente
+// UV" + "Crédito simple UV"), cada línea lleva su propio historial mes
+// a mes, completamente independiente de las demás. Antes vivía por
+// empresa y mezclaba los saldos de todas sus líneas en un mismo
+// registro — esto es justo lo que se corrigió.
+let registrosMensualesPorLinea = {};
+// registrosMensualesPorLinea[lineaId] = [ { id, lineaId, etiqueta, efectivo, pago, saldos: { [lineaId]: valorTexto } }, ... ]
+// "saldos" se conserva como mapa (en vez de un campo plano) por compati-
+// bilidad con las funciones que ya lo leen así (agregarColumnaSaldoARegistro,
+// recalcularRegistroMensual, calcularDeudaDeRegistro) — en la práctica
+// cada registro de este mapa tiene una sola llave: la de su propia línea.
 
 // ── Persistencia (Supabase) ──
 function creditoLineaFilaDB(linea, empresaId, orden) {
@@ -9418,13 +9436,13 @@ async function eliminarLineaCreditoDB(id) {
 
 function creditoRegistroFilaDB(registro, empresaId, orden) {
   return {
-    id: registro.id, empresa_id: empresaId, etiqueta: registro.etiqueta || '',
+    id: registro.id, empresa_id: empresaId, linea_id: registro.lineaId, etiqueta: registro.etiqueta || '',
     efectivo: registro.efectivo || '', pago: registro.pago || '', saldos: registro.saldos || {},
     orden, actualizado_en: new Date().toISOString(),
   };
 }
 async function guardarRegistroMensual(registro) {
-  const orden = (registrosMensualesPorEmpresa[empresaActual] || []).findIndex(r => r.id === registro.id);
+  const orden = (registrosMensualesPorLinea[registro.lineaId] || []).findIndex(r => r.id === registro.id);
   try {
     await sbRequest('POST', '/rest/v1/credito_registros?on_conflict=id', [creditoRegistroFilaDB(registro, empresaActual, orden)]);
     showStatus('✓ Guardado');
@@ -9433,6 +9451,13 @@ async function guardarRegistroMensual(registro) {
 async function eliminarRegistroMensualDB(id) {
   try { await sbRequest('DELETE', `/rest/v1/credito_registros?id=eq.${encodeURIComponent(id)}`); }
   catch(e) { console.error('eliminarRegistroMensualDB error:', e); }
+}
+// Al quitar una línea de crédito completa, se borra también TODO su
+// historial de registros mensuales (antes no existía este caso: una
+// línea solo perdía su "columna" dentro de registros compartidos).
+async function eliminarRegistrosDeLineaDB(lineaId) {
+  try { await sbRequest('DELETE', `/rest/v1/credito_registros?linea_id=eq.${encodeURIComponent(lineaId)}`); }
+  catch(e) { console.error('eliminarRegistrosDeLineaDB error:', e); }
 }
 
 // Trae fresco de Supabase lo que haya para UNA empresa y reemplaza su
@@ -9450,9 +9475,18 @@ async function cargarCreditosDesdeSupabase(empresaId) {
 
   try {
     const filas = await sbRequest('GET', `/rest/v1/credito_registros?empresa_id=eq.${encodeURIComponent(empresaId)}&select=*&order=orden.asc`);
-    registrosMensualesPorEmpresa[empresaId] = (filas || []).map(r => ({
-      id: r.id, etiqueta: r.etiqueta || '', efectivo: r.efectivo || '', pago: r.pago || '', saldos: r.saldos || {},
-    }));
+    // Se limpia primero el historial de cada línea de ESTA empresa (no
+    // todo el objeto global) para no pisar el de otras empresas ya
+    // cargadas — y para que una línea recién borrada no deje basura.
+    (lineasCreditoPorEmpresa[empresaId] || []).forEach(l => { registrosMensualesPorLinea[l.id] = []; });
+    (filas || []).forEach(r => {
+      const lineaId = r.linea_id;
+      if (!lineaId) return; // fila sin línea asignada: no debería pasar, se ignora por seguridad
+      if (!registrosMensualesPorLinea[lineaId]) registrosMensualesPorLinea[lineaId] = [];
+      registrosMensualesPorLinea[lineaId].push({
+        id: r.id, lineaId, etiqueta: r.etiqueta || '', efectivo: r.efectivo || '', pago: r.pago || '', saldos: r.saldos || {},
+      });
+    });
   } catch(e) { console.error('cargarCreditosDesdeSupabase (registros) error:', e); }
 }
 
@@ -9563,14 +9597,18 @@ async function agregarLineaCredito() {
   const primerCampo = card.querySelector('.linea-credito-titulo');
   if (primerCampo) primerCampo.focus();
 
-  // Agrega, en vivo, una columna de saldo para esta línea nueva en
-  // cada registro mensual que ya exista — así no hace falta salir y
-  // volver a entrar al tab para que aparezca.
-  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
-  document.querySelectorAll('#registrosMensualesCont .credito-registro-card').forEach(regCard => {
-    const registro = registros.find(r => r.id === regCard.dataset.registroId);
-    if (registro) agregarColumnaSaldoARegistro(regCard, registro, id, '');
-  });
+  // Cada línea nueva llega con su propio módulo de Registro mensual +
+  // Seguimiento, vacío y listo para capturar — totalmente independiente
+  // de las demás líneas de la empresa (antes se le agregaba una
+  // "columna" a los registros ya existentes; ya no aplica, porque cada
+  // línea ahora lleva su propio historial separado).
+  registrosMensualesPorLinea[id] = [];
+  const modCont  = document.getElementById('creditosLineasModulosCont');
+  const modVacio = document.getElementById('creditosLineasModulosVacio');
+  if (modCont) {
+    modCont.appendChild(crearModuloLinea(linea));
+    if (modVacio) modVacio.style.display = 'none';
+  }
 
   await guardarLineaCredito(linea);
 }
@@ -9584,25 +9622,19 @@ async function quitarLineaCredito(id) {
   const cont  = document.getElementById('lineasCreditoCont');
   if (vacio && cont) vacio.style.display = cont.children.length ? 'none' : '';
 
-  // Quita, en vivo, la columna de saldo de esta línea de cada registro
-  // mensual existente (memoria + DOM), recalcula sus totales, y
-  // re-guarda cada registro afectado (su columna "saldos" cambió).
-  const registros = registrosMensualesPorEmpresa[empresaActual] || [];
-  const afectados = [];
-  document.querySelectorAll('#registrosMensualesCont .credito-registro-card').forEach(regCard => {
-    const celda = regCard.querySelector(`.creditos-campo-saldo[data-linea-id="${id}"]`);
-    if (celda) celda.remove();
-    const registro = registros.find(r => r.id === regCard.dataset.registroId);
-    if (registro && registro.saldos && registro.saldos[id] !== undefined) {
-      delete registro.saldos[id];
-      afectados.push(registro);
-    }
-    if (registro) recalcularRegistroMensual(regCard, registro);
-  });
-  renderSeguimientoCreditoActual();
+  // Quita también, completo, el módulo de Registro mensual + Seguimiento
+  // de esta línea (y todo su historial en memoria y en Supabase) — ya
+  // no es solo "una columna" que desaparece, es todo el historial propio
+  // de esa línea el que se elimina.
+  const modulo = document.querySelector(`.creditos-linea-modulo[data-linea-id="${id}"]`);
+  if (modulo) modulo.remove();
+  delete registrosMensualesPorLinea[id];
+  const modCont  = document.getElementById('creditosLineasModulosCont');
+  const modVacio = document.getElementById('creditosLineasModulosVacio');
+  if (modVacio && modCont) modVacio.style.display = modCont.children.length ? 'none' : '';
 
   await eliminarLineaCreditoDB(id);
-  await Promise.all(afectados.map(r => guardarRegistroMensual(r)));
+  await eliminarRegistrosDeLineaDB(id);
 }
 
 function initLineasCredito() {
@@ -9685,10 +9717,11 @@ function crearRegistroMensual(registro) {
     guardarRegistroMensual(registro);
   });
 
-  // Una columna de saldo por cada línea de crédito ACTUALMENTE activa
-  // en esta empresa — se insertan antes de "Total préstamo bancario".
-  const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
-  lineas.forEach(l => agregarColumnaSaldoARegistro(card, registro, l.id, l.nombre));
+  // Una sola columna de saldo: la de SU línea de crédito — cada línea
+  // ahora vive en su propio módulo independiente, así que ya no hace
+  // falta agregar una columna por cada línea de la empresa.
+  const lineaObj = (lineasCreditoPorEmpresa[empresaActual] || []).find(l => l.id === registro.lineaId);
+  agregarColumnaSaldoARegistro(card, registro, registro.lineaId, lineaObj ? lineaObj.nombre : '');
 
   ['efectivo', 'pago'].forEach(campo => {
     const el = card.querySelector(`[data-campo="${campo}"]`);
@@ -9709,14 +9742,14 @@ function crearRegistroMensual(registro) {
     });
   });
 
-  card.querySelector('.creditos-registro-remove').addEventListener('click', () => quitarRegistroMensual(registro.id));
+  card.querySelector('.creditos-registro-remove').addEventListener('click', () => quitarRegistroMensual(registro.id, registro.lineaId));
   recalcularRegistroMensual(card, registro);
   return card;
 }
 
-// Deuda neta de un registro: Total de saldos de sus líneas, menos
-// Efectivo disponible, menos Pago capital — misma fórmula que ya
-// calcula recalcularRegistroMensual() a partir del DOM.
+// Deuda neta de un registro: su saldo, menos Efectivo/Crédito disponible,
+// menos Pago capital — misma fórmula que recalcularRegistroMensual()
+// calcula a partir del DOM.
 function calcularDeudaDeRegistro(registro) {
   const totalSaldos = Object.values((registro && registro.saldos) || {}).reduce((s, v) => s + parseMXN(v), 0);
   return totalSaldos - parseMXN(registro && registro.efectivo) - parseMXN(registro && registro.pago);
@@ -9734,97 +9767,114 @@ function recalcularRegistroMensual(card, registro) {
   card.querySelector('[data-campo="total"]').textContent = formatMXN(totalSaldos);
   card.querySelector('[data-campo="deuda"]').textContent = formatMXN(deuda);
 
-  renderSeguimientoCreditoActual();
+  renderSeguimientoLinea(registro.lineaId);
 }
 
-function entrarParteRegistrosMensuales() {
-  const cont  = document.getElementById('registrosMensualesCont');
-  const vacio = document.getElementById('registrosMensualesVacio');
+// ═══ Un módulo (Registro mensual + Seguimiento) POR CADA línea de
+// crédito de la empresa — reemplaza el bloque único que antes
+// compartían todas las líneas de una misma empresa. ═══
+
+function entrarModulosLineasCredito() {
+  const cont  = document.getElementById('creditosLineasModulosCont');
+  const vacio = document.getElementById('creditosLineasModulosVacio');
   if (!cont) return;
   cont.innerHTML = '';
-  const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
-  lista.forEach(r => cont.appendChild(crearRegistroMensual(r)));
-  if (vacio) vacio.style.display = lista.length ? 'none' : '';
+  const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
+  lineas.forEach(l => cont.appendChild(crearModuloLinea(l)));
+  if (vacio) vacio.style.display = lineas.length ? 'none' : '';
 }
 
-async function agregarRegistroMensual() {
+function crearModuloLinea(linea) {
+  const wrap = document.createElement('div');
+  wrap.className = 'creditos-linea-modulo';
+  wrap.dataset.lineaId = linea.id;
+  const labelDisponible = empresaActual === 'nmh_baja_sur' ? 'crédito disponible' : 'efectivo disponible';
+  wrap.innerHTML = `
+    <div class="ornamento">— · —</div>
+    <div class="sec-header-row">
+      <p class="sec-label bold" style="margin:0">Registro mensual — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
+      <button class="btn-add-circular btn-agregar-registro-linea" type="button" title="Agregar registro del mes">+</button>
+    </div>
+    <p class="creditos-parte-nota">Uno por mes: el saldo de esta línea, más ${labelDisponible} y Pago capital.</p>
+    <div class="registros-mensuales-linea-cont"></div>
+    <p class="creditos-vacio registros-mensuales-linea-vacio">Sin registros mensuales — dale al "+" para agregar el de este mes</p>
+    <p class="sec-label bold" style="margin:16px 0 2px">Seguimiento mes a mes — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
+    <div class="seguimiento-linea-cont"></div>
+  `;
+
+  const registrosCont  = wrap.querySelector('.registros-mensuales-linea-cont');
+  const registrosVacio = wrap.querySelector('.registros-mensuales-linea-vacio');
+  const lista = registrosMensualesPorLinea[linea.id] || (registrosMensualesPorLinea[linea.id] = []);
+  lista.forEach(r => registrosCont.appendChild(crearRegistroMensual(r)));
+  registrosVacio.style.display = lista.length ? 'none' : '';
+
+  wrap.querySelector('.btn-agregar-registro-linea').addEventListener('click', () => agregarRegistroMensual(linea.id));
+
+  wrap.querySelector('.seguimiento-linea-cont').innerHTML = construirTablaSeguimientoLineaHTML(linea.id);
+
+  return wrap;
+}
+
+async function agregarRegistroMensual(lineaId) {
   const id = 'rm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  const lista = registrosMensualesPorEmpresa[empresaActual] || (registrosMensualesPorEmpresa[empresaActual] = []);
+  const lista = registrosMensualesPorLinea[lineaId] || (registrosMensualesPorLinea[lineaId] = []);
   const anterior = lista.length ? lista[lista.length - 1] : null;
 
-  // El nuevo registro arranca con Efectivo disponible y cada saldo de
-  // línea en $0.00 — el usuario captura cada valor a mano cada mes.
-  const lineas = lineasCreditoPorEmpresa[empresaActual] || [];
-  const saldos = {};
-  lineas.forEach(l => { saldos[l.id] = formatMXN(0); });
-
-  // Pago capital es un monto FIJO que se repite mes a mes (no algo que
-  // deba cambiar solo) — se copia tal cual del registro anterior. Antes
-  // aquí había un valor escrito a mano por error; ahora sí sale del
-  // registro real más reciente (editable si algún mes sí cambia).
-  const pagoInicial = anterior ? (anterior.pago || formatMXN(0)) : formatMXN(0);
-
-  // La "Deuda neta" del registro anterior se copia como saldo inicial
-  // de la línea "principal" de esa empresa (sigue siendo editable) —
-  // es lo que realmente queda pendiente después de aplicar efectivo/
-  // pago del mes pasado, y a partir de ahí sigue bajando conforme se
-  // va abonando. Cada empresa tiene su propia línea "principal":
-  // Unveil = Crédito simple UV; Warehouse Rentals (nmh_baja_sur) =
-  // Revolvente WH. Si se agrega una empresa nueva a Créditos más
-  // adelante y no está en este mapa, simplemente no copia nada (mismo
-  // comportamiento que antes de este cambio).
-  const LINEA_OBJETIVO_DEUDA_POR_EMPRESA = {
-    unveil: 'crédito simple uv',
-    nmh_baja_sur: 'revolvente wh',
-  };
-  if (anterior) {
-    const nombreObjetivo = LINEA_OBJETIVO_DEUDA_POR_EMPRESA[empresaActual];
-    const lineaSimple = nombreObjetivo
-      ? lineas.find(l => (l.nombre || '').trim().toLowerCase() === nombreObjetivo)
-      : null;
-    if (lineaSimple) {
-      const valoresAnterior = lineas.map(l => (anterior.saldos && anterior.saldos[l.id] !== undefined) ? parseMXN(anterior.saldos[l.id]) : 0);
-      const totalAnterior  = valoresAnterior.reduce((s, v) => s + v, 0);
-      const deudaAnterior  = totalAnterior - parseMXN(anterior.efectivo) - parseMXN(anterior.pago);
-      saldos[lineaSimple.id] = formatMXN(deudaAnterior);
-    }
-  }
+  // El nuevo registro arranca con el saldo igual a la Deuda neta que
+  // dejó el registro anterior de ESTA MISMA línea (lo que realmente
+  // queda pendiente después de aplicar efectivo/pago del mes pasado) —
+  // y a partir de ahí sigue bajando conforme se va abonando. El Pago
+  // capital, al ser un monto fijo que se repite mes a mes, se copia tal
+  // cual del registro anterior (sigue siendo editable si algún mes sí
+  // cambia). Antes esto solo pasaba para UNA línea "principal" por
+  // empresa (por estar mezcladas); ahora, al ser cada línea su propio
+  // módulo, aplica igual para todas — incluida Revolvente UV.
+  const saldoInicial = anterior ? formatMXN(calcularDeudaDeRegistro(anterior)) : formatMXN(0);
+  const pagoInicial  = anterior ? (anterior.pago || formatMXN(0)) : formatMXN(0);
 
   const registro = {
-    id,
+    id, lineaId,
     etiqueta: '',
     efectivo: formatMXN(0),
     pago: pagoInicial,
-    saldos,
+    saldos: { [lineaId]: saldoInicial },
   };
   lista.push(registro);
 
-  const cont  = document.getElementById('registrosMensualesCont');
-  const vacio = document.getElementById('registrosMensualesVacio');
-  const card  = crearRegistroMensual(registro);
-  cont.appendChild(card);
+  const modulo = document.querySelector(`.creditos-linea-modulo[data-linea-id="${lineaId}"]`);
+  const cont   = modulo ? modulo.querySelector('.registros-mensuales-linea-cont') : null;
+  const vacio  = modulo ? modulo.querySelector('.registros-mensuales-linea-vacio') : null;
+  const card   = crearRegistroMensual(registro);
+  if (cont) cont.appendChild(card);
   if (vacio) vacio.style.display = 'none';
   const primerCampo = card.querySelector('.credito-registro-etiqueta');
   if (primerCampo) primerCampo.focus();
-  renderSeguimientoCreditoActual();
+  renderSeguimientoLinea(lineaId);
 
   await guardarRegistroMensual(registro);
 }
 
-async function quitarRegistroMensual(id) {
-  const lista = registrosMensualesPorEmpresa[empresaActual];
-  if (lista) registrosMensualesPorEmpresa[empresaActual] = lista.filter(r => r.id !== id);
-  // Se reconstruye toda la parte B para que las flechitas de "vs. mes
-  // anterior" queden correctas al recalcular la cadena de registros.
-  entrarParteRegistrosMensuales();
-  renderSeguimientoCreditoActual();
+async function quitarRegistroMensual(id, lineaId) {
+  const lista = registrosMensualesPorLinea[lineaId];
+  if (lista) registrosMensualesPorLinea[lineaId] = lista.filter(r => r.id !== id);
+
+  // Se reconstruye el módulo de ESTA línea (solo esta, no las demás)
+  // para que las flechitas de "vs. mes anterior" queden correctas al
+  // recalcular la cadena de registros.
+  const modulo = document.querySelector(`.creditos-linea-modulo[data-linea-id="${lineaId}"]`);
+  if (modulo) {
+    const cont  = modulo.querySelector('.registros-mensuales-linea-cont');
+    const vacio = modulo.querySelector('.registros-mensuales-linea-vacio');
+    if (cont) {
+      cont.innerHTML = '';
+      const restantes = registrosMensualesPorLinea[lineaId] || [];
+      restantes.forEach(r => cont.appendChild(crearRegistroMensual(r)));
+      if (vacio) vacio.style.display = restantes.length ? 'none' : '';
+    }
+  }
+  renderSeguimientoLinea(lineaId);
 
   await eliminarRegistroMensualDB(id);
-}
-
-function initRegistrosMensuales() {
-  const btn = document.getElementById('btnAgregarRegistroMensual');
-  if (btn) btn.addEventListener('click', agregarRegistroMensual);
 }
 
 // ── Punto de entrada del tab (Unveil / WH) ──
@@ -9838,18 +9888,16 @@ async function entrarTabCreditos() {
   await cargarCreditosDesdeSupabase(empresaActual);
 
   entrarParteLineasCredito();
-  entrarParteRegistrosMensuales();
-  renderSeguimientoCreditoActual();
+  entrarModulosLineasCredito();
 }
 
 function initCreditosBancarios() {
   initLineasCredito();
-  initRegistrosMensuales();
 }
 
 // ═══ Unveil / NMH Baja Sur / Grupo Idirin — las tres CONECTADAS ═══
 // Las tres leen exactamente los mismos objetos en memoria
-// (lineasCreditoPorEmpresa / registrosMensualesPorEmpresa): lo que se
+// (lineasCreditoPorEmpresa / registrosMensualesPorLinea): lo que se
 // captura en el tab "Créditos" de Unveil o de NMH Baja Sur se refleja
 // de inmediato tanto en su propia tabla de seguimiento como en la
 // vista combinada de Grupo Idirin — no hace falta capturar nada dos
@@ -9872,52 +9920,137 @@ function creditosGrpColumnas() {
 }
 
 // Etiquetas de mes (ej. "Agosto 2026"), en el orden en que se
-// capturaron, sin duplicar si ambas empresas usan el mismo texto.
+// capturaron, sin duplicar — ahora recorriendo el historial de CADA
+// línea de crédito de ambas empresas (antes leía por empresa).
 function creditosGrpEtiquetas() {
   const vistos = new Set();
   const etiquetas = [];
   CREDITOS_GRP_EMPRESAS.forEach(emp => {
-    (registrosMensualesPorEmpresa[emp.id] || []).forEach(r => {
-      const key = (r.etiqueta || '').trim().toLowerCase();
-      if (key && !vistos.has(key)) { vistos.add(key); etiquetas.push(r.etiqueta.trim()); }
+    (lineasCreditoPorEmpresa[emp.id] || []).forEach(l => {
+      (registrosMensualesPorLinea[l.id] || []).forEach(r => {
+        const key = (r.etiqueta || '').trim().toLowerCase();
+        if (key && !vistos.has(key)) { vistos.add(key); etiquetas.push(r.etiqueta.trim()); }
+      });
     });
   });
   return etiquetas;
 }
 
-// Tabla de "seguimiento mes a mes" de UNA empresa: una fila por cada
-// momento (Monto original + un registro mensual por fila), una
-// columna por cada línea de crédito de esa empresa, más Total
-// préstamo y Deuda neta — con la flechita de cuánto bajó (o subió)
-// respecto al renglón de arriba. La usan tanto el tab de la propia
-// empresa (Unveil/NMH) como el espejo de Grupo Idirin: MISMA función,
-// para que las tres vistas queden siempre conectadas y consistentes.
-function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
-  const lineasEmp = lineasCreditoPorEmpresa[empresaId] || [];
-  const registros = registrosMensualesPorEmpresa[empresaId] || [];
-  if (lineasEmp.length === 0) {
-    return '<p class="creditos-vacio">Agrega al menos una línea de crédito para ver el seguimiento</p>';
+// Tabla de "seguimiento mes a mes" de UNA SOLA línea de crédito — la
+// usa cada módulo individual (Unveil/WH) para que Revolvente UV,
+// Crédito simple UV y Revolvente WH se vean cada una con su propio
+// historial, sin mezclarse entre sí.
+function construirTablaSeguimientoLineaHTML(lineaId) {
+  let linea = null, empresaId = null;
+  for (const emp in lineasCreditoPorEmpresa) {
+    const encontrada = (lineasCreditoPorEmpresa[emp] || []).find(l => l.id === lineaId);
+    if (encontrada) { linea = encontrada; empresaId = emp; break; }
   }
+  const labelDisponible = empresaId === 'nmh_baja_sur' ? 'Crédito disponible' : 'Efectivo disponible';
+  const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
     ...registros.map(r => ({ etiqueta: r.etiqueta || 'Sin etiqueta', registro: r, esReg: true })),
   ];
 
-  const valoresDeFila = (f) => f.esReg
-    ? lineasEmp.map(l => (f.registro.saldos && f.registro.saldos[l.id] !== undefined) ? parseMXN(f.registro.saldos[l.id]) : null)
-    : lineasEmp.map(l => parseMXN(l.monto));
+  const filasHTML = filas.map(f => {
+    const saldo = f.esReg
+      ? (f.registro.saldos && f.registro.saldos[lineaId] !== undefined ? parseMXN(f.registro.saldos[lineaId]) : 0)
+      : parseMXN(linea ? linea.monto : 0);
+    const efectivo = f.esReg ? parseMXN(f.registro.efectivo) : null;
+    const pago      = f.esReg ? parseMXN(f.registro.pago) : null;
+    const deuda     = f.esReg ? saldo - (efectivo || 0) - (pago || 0) : saldo;
+    return `
+      <tr>
+        <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
+        <td>${escapeHTML(formatMXN(saldo))}</td>
+        <td>${efectivo === null ? '—' : escapeHTML(formatMXN(efectivo))}</td>
+        <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
+      </tr>`;
+  }).join('');
 
-  const deudaDeFila = (f, valores) => {
-    const total = valores.reduce((s, v) => s + (v || 0), 0);
-    if (!f.esReg) return total;
-    return total - parseMXN(f.registro.efectivo) - parseMXN(f.registro.pago);
+  return `
+    <div class="grp-acum-matrix-wrap">
+      <table class="grp-acum-matrix">
+        <thead>
+          <tr>
+            <th class="grp-acum-matrix-empresa">Mes</th>
+            <th>Saldo</th>
+            <th>${labelDisponible}</th>
+            <th>Pago capital</th>
+            <th>Deuda neta pendiente</th>
+          </tr>
+        </thead>
+        <tbody>${filasHTML}</tbody>
+      </table>
+    </div>`;
+}
+
+// Refresca la tabla de seguimiento de UNA línea (dentro de su propio
+// módulo, en el tab de su empresa) — se llama cada vez que algo cambia
+// en su Registro mensual, para que "cuánto baja" se vea al instante
+// sin salir del tab.
+function renderSeguimientoLinea(lineaId) {
+  const modulo = document.querySelector(`.creditos-linea-modulo[data-linea-id="${lineaId}"]`);
+  if (!modulo) return;
+  const cont = modulo.querySelector('.seguimiento-linea-cont');
+  if (!cont) return;
+  cont.innerHTML = construirTablaSeguimientoLineaHTML(lineaId);
+}
+
+// Tabla COMBINADA de "seguimiento mes a mes" de todas las líneas de
+// UNA empresa a la vez (una columna por línea) — de uso exclusivo del
+// espejo de Grupo Idirin, para dar ahí una vista panorámica por
+// empresa. Ya NO la usan los tabs individuales de Unveil/WH (que ahora
+// muestran cada línea por separado vía construirTablaSeguimientoLineaHTML).
+function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
+  const lineasEmp = lineasCreditoPorEmpresa[empresaId] || [];
+  if (lineasEmp.length === 0) {
+    return '<p class="creditos-vacio">Agrega al menos una línea de crédito para ver el seguimiento</p>';
+  }
+
+  const registroDeLinea = (lineaId, etiqueta) => {
+    const key = etiqueta.trim().toLowerCase();
+    return (registrosMensualesPorLinea[lineaId] || []).find(r => (r.etiqueta || '').trim().toLowerCase() === key);
   };
 
-  const filasHTML = filas.map((f, i) => {
+  const vistos = new Set();
+  const etiquetasEmp = [];
+  lineasEmp.forEach(l => {
+    (registrosMensualesPorLinea[l.id] || []).forEach(r => {
+      const key = (r.etiqueta || '').trim().toLowerCase();
+      if (key && !vistos.has(key)) { vistos.add(key); etiquetasEmp.push(r.etiqueta.trim()); }
+    });
+  });
+
+  const filas = [
+    { etiqueta: 'Monto original', esReg: false },
+    ...etiquetasEmp.map(etq => ({ etiqueta: etq, esReg: true })),
+  ];
+
+  const valoresDeFila = (f) => f.esReg
+    ? lineasEmp.map(l => { const r = registroDeLinea(l.id, f.etiqueta); return r && r.saldos && r.saldos[l.id] !== undefined ? parseMXN(r.saldos[l.id]) : null; })
+    : lineasEmp.map(l => parseMXN(l.monto));
+
+  // Efectivo/Pago capital combinados: suma de lo capturado en CADA
+  // línea de esta empresa para ese mes (cada línea ya guarda lo suyo
+  // por separado, así que aquí sí se suman sin riesgo de doble conteo).
+  const efectivoPagoDeFila = (f) => {
+    if (!f.esReg) return { efectivo: 0, pago: 0 };
+    return lineasEmp.reduce((acc, l) => {
+      const r = registroDeLinea(l.id, f.etiqueta);
+      if (r) { acc.efectivo += parseMXN(r.efectivo); acc.pago += parseMXN(r.pago); }
+      return acc;
+    }, { efectivo: 0, pago: 0 });
+  };
+
+  const filasHTML = filas.map(f => {
     const valores = valoresDeFila(f);
     const total   = valores.reduce((s, v) => s + (v || 0), 0);
-    const deuda   = deudaDeFila(f, valores);
-    const pagoCapital = f.esReg ? parseMXN(f.registro.pago) : null;
+    const { efectivo, pago } = efectivoPagoDeFila(f);
+    const deuda   = f.esReg ? total - efectivo - pago : total;
+    const pagoCapital = f.esReg ? pago : null;
     return `
       <tr>
         <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
@@ -9944,16 +10077,6 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
         <tbody>${filasHTML}</tbody>
       </table>
     </div>`;
-}
-
-// Refresca la tabla de seguimiento dentro del propio tab de la
-// empresa activa (Unveil o NMH) — se llama cada vez que algo cambia
-// en Líneas de crédito o en Registro mensual, para que "cuánto baja"
-// se vea al instante sin salir del tab.
-function renderSeguimientoCreditoActual() {
-  const cont = document.getElementById('seguimientoCreditoCont');
-  if (!cont) return;
-  cont.innerHTML = construirTablaSeguimientoLineasHTML(empresaActual);
 }
 
 // ── Tarjetas de "información fija" (amarillo, como en el Excel de
@@ -10012,36 +10135,34 @@ async function entrarTabCreditosGrupo() {
     return;
   }
 
-  // Busca, para una etiqueta de mes dada, el registro mensual de una
-  // empresa concreta que corresponda a ese mes (comparando texto).
-  const registroDe = (empresaId, etiqueta) => {
+  // Busca, para una etiqueta de mes dada, el registro mensual de UNA
+  // línea de crédito concreta que corresponda a ese mes (comparando
+  // texto). Antes se buscaba por empresa (mezclando sus líneas); ahora
+  // cada línea tiene su propio historial, así que se busca por línea.
+  const registroDe = (lineaId, etiqueta) => {
     const key = etiqueta.trim().toLowerCase();
-    return (registrosMensualesPorEmpresa[empresaId] || []).find(r => (r.etiqueta || '').trim().toLowerCase() === key);
+    return (registrosMensualesPorLinea[lineaId] || []).find(r => (r.etiqueta || '').trim().toLowerCase() === key);
   };
 
   // Fila "Monto original": lo dispersado de cada línea, sin abonos.
   const filaOriginal = { esOriginal: true, celdas: columnas.map(c => parseMXN(c.monto)) };
 
-  // Una fila por cada mes ya registrado (en cualquiera de las dos
-  // empresas), tomando el saldo de cada columna del registro de la
-  // empresa dueña de esa línea para ese mes.
+  // Una fila por cada mes ya registrado (en cualquiera de las líneas de
+  // ambas empresas), tomando el saldo propio de cada línea para ese mes.
   const filasMeses = etiquetas.map(etiqueta => {
     const celdas = columnas.map(c => {
-      const reg = registroDe(c.empresaId, etiqueta);
+      const reg = registroDe(c.id, etiqueta);
       return reg && reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : null;
     });
-    // Efectivo disponible y Pago capital son el mismo movimiento de
-    // caja reflejado en ambas empresas — se toma una sola vez (no se
-    // suman) del primer registro del mes que lo tenga capturado.
+    // Efectivo disponible y Pago capital combinados: ahora que cada
+    // línea guarda lo suyo por separado, se suman sin riesgo de doble
+    // conteo (antes se tomaba de un solo registro por empresa porque
+    // ahí sí era un valor único compartido entre sus líneas).
     let efectivo = 0, pago = 0;
-    for (const emp of CREDITOS_GRP_EMPRESAS) {
-      const reg = registroDe(emp.id, etiqueta);
-      if (reg && (parseMXN(reg.efectivo) || parseMXN(reg.pago))) {
-        efectivo = parseMXN(reg.efectivo);
-        pago     = parseMXN(reg.pago);
-        break;
-      }
-    }
+    columnas.forEach(c => {
+      const reg = registroDe(c.id, etiqueta);
+      if (reg) { efectivo += parseMXN(reg.efectivo); pago += parseMXN(reg.pago); }
+    });
     return { etiqueta, celdas, efectivo, pago };
   });
 
