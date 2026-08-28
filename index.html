@@ -7563,19 +7563,24 @@ function sincronizarLineaCreditoDesdeCreditos() {
 }
 
 // A partir del historial de UNA línea de crédito (registrosMensualesPorLinea),
-// calcula su "Línea de crédito" (Total préstamo del registro más
-// reciente) y su "Deuda de la línea de crédito" (Deuda neta pendiente:
-// Saldo − Pago capital — "Crédito disponible" ya no resta aquí, ver
-// calcularDeudaDeRegistro en el tab Créditos). Devuelve null si esa
-// línea todavía no tiene ningún registro mensual capturado en el tab
-// Créditos — así el que llama decide qué mostrar (guion, o simplemente
-// no forzar nada).
+// calcula su "Línea de crédito" (monto/capacidad) y su "Deuda de la
+// línea de crédito" — normalmente Saldo − Pago capital ("Crédito
+// disponible" ya no resta aquí, ver calcularDeudaDeRegistro en el tab
+// Créditos). Caso especial Revolvente UV (ver esRevolventeUV): aquí
+// "Deuda de la línea de crédito" = Disposición (= Pago capital, ligado
+// 1:1) en vez de la Deuda neta (que en esa línea siempre da $0) — así
+// esta tarjeta en Saldos queda consistente con "Crédito disponible" del
+// tab Créditos (monto − deuda = revolvente − disposición, igual allá).
+// Devuelve null si esa línea todavía no tiene ningún registro mensual
+// capturado en el tab Créditos — así el que llama decide qué mostrar
+// (guion, o simplemente no forzar nada).
 function calcularSincroniaLinea(lineaId) {
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const ultimo = registros.length ? registros[registros.length - 1] : null;
   if (!ultimo) return null;
   const monto = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
-  const deuda = monto - parseMXN(ultimo.pago);
+  const pago = parseMXN(ultimo.pago);
+  const deuda = esRevolventeUV(lineaId) ? pago : monto - pago;
   return { monto, deuda };
 }
 
@@ -9530,6 +9535,25 @@ function empresaDeLinea(lineaId) {
   return null;
 }
 
+// ── Caso especial: Revolvente UV (Unveil) ──
+// A petición explícita, SOLO esta línea usa una mecánica distinta a
+// todas las demás (Crédito simple UV, Revolvente WH): en vez de
+// "Total préstamo bancario" (suma del saldo capturado), su tarjeta
+// muestra "Disposición" — que queda SIEMPRE ligada 1:1 al valor de
+// Pago capital de ese mismo registro (si cambias Pago capital,
+// Disposición cambia con él, no es un campo aparte). A partir de ahí:
+//   Crédito disponible = Revolvente (saldo de esta línea en el
+//                          registro) − Disposición
+//   Deuda neta          = Disposición − Pago capital  → por diseño da
+//                          siempre $0 en esta línea (confirmado).
+// Ver crearRegistroMensual, recalcularRegistroMensual,
+// actualizarCreditoDisponible, calcularDeudaDeRegistro,
+// construirTablaSeguimientoLineaHTML y construirTablaSeguimientoLineasHTML.
+const LINEA_REVOLVENTE_UV_ID = 'lc_uv_revolvente';
+function esRevolventeUV(lineaId) {
+  return lineaId === LINEA_REVOLVENTE_UV_ID;
+}
+
 // ── Persistencia (Supabase) ──
 function creditoLineaFilaDB(linea, empresaId, orden) {
   return {
@@ -9811,7 +9835,7 @@ function crearRegistroMensual(registro) {
     <p class="credito-registro-etiqueta" contenteditable="true" data-placeholder="Mes o fecha de este registro (ej. Agosto 2026)">${escapeHTML(registro.etiqueta || '')}</p>
     <div class="creditos-mini-grid">
       <div class="creditos-campo campo-total">
-        <span class="creditos-campo-label">Total préstamo bancario</span>
+        <span class="creditos-campo-label">${esRevolventeUV(registro.lineaId) ? 'Disposición' : 'Total préstamo bancario'}</span>
         <span class="creditos-campo-valor" data-auto="true" data-campo="total">$0</span>
       </div>
       <div class="creditos-campo">
@@ -9874,43 +9898,73 @@ function crearRegistroMensual(registro) {
 // disponible" ya no participa aquí (ver actualizarCreditoDisponible: es
 // al revés, se calcula A PARTIR de esta Deuda neta). Misma fórmula que
 // recalcularRegistroMensual() calcula a partir del DOM.
+// Caso especial Revolvente UV (ver esRevolventeUV): Deuda neta =
+// Disposición − Pago capital, y Disposición está siempre ligada 1:1 al
+// propio Pago capital — así que en esta línea la Deuda neta da siempre
+// $0, por diseño (confirmado explícitamente).
 function calcularDeudaDeRegistro(registro) {
-  const totalSaldos = Object.values((registro && registro.saldos) || {}).reduce((s, v) => s + parseMXN(v), 0);
   const pago = parseMXN(registro && registro.pago);
+  if (registro && esRevolventeUV(registro.lineaId)) {
+    return pago - pago; // Disposición (= pago) − Pago capital = 0, siempre
+  }
+  const totalSaldos = Object.values((registro && registro.saldos) || {}).reduce((s, v) => s + parseMXN(v), 0);
   return totalSaldos - pago;
 }
 
 function recalcularRegistroMensual(card, registro) {
-  let totalSaldos = 0;
-  card.querySelectorAll('.creditos-campo-saldo [data-linea]').forEach(el => {
-    totalSaldos += parseMXN(el.textContent);
-  });
-  const pago  = parseMXN(card.querySelector('[data-campo="pago"]').textContent);
-  const deuda = totalSaldos - pago;
+  const pago = parseMXN(card.querySelector('[data-campo="pago"]').textContent);
+  let totalMostrado, deuda;
 
-  card.querySelector('[data-campo="total"]').textContent = formatMXN(totalSaldos);
+  if (esRevolventeUV(registro.lineaId)) {
+    // "Disposición" (antes "Total préstamo bancario") queda SIEMPRE
+    // igual a Pago capital — no se suma el saldo aquí.
+    totalMostrado = pago;
+    deuda = totalMostrado - pago; // = 0, por diseño
+  } else {
+    let totalSaldos = 0;
+    card.querySelectorAll('.creditos-campo-saldo [data-linea]').forEach(el => {
+      totalSaldos += parseMXN(el.textContent);
+    });
+    totalMostrado = totalSaldos;
+    deuda = totalSaldos - pago;
+  }
+
+  card.querySelector('[data-campo="total"]').textContent = formatMXN(totalMostrado);
   card.querySelector('[data-campo="deuda"]').textContent = formatMXN(deuda);
 
   renderSeguimientoLinea(registro.lineaId);
 }
 
-// "Crédito disponible" (Revolvente UV, Crédito simple UV, Revolvente
-// WH — las tres) ya NO es un dato que se escriba a mano para que reste
-// en la Deuda neta — es al revés, se AUTO-CALCULA como el límite de esa
-// línea (su "monto" capturado en Líneas de crédito) menos la Deuda neta
-// que se acaba de resolver — mismo criterio que "Saldo disponible línea
-// de crédito" en el tab Saldos. El campo sigue siendo editable (por si
-// algún día hace falta ajustarlo a mano), pero se recalcula solo cada
-// vez que cambian el Saldo o el Pago capital — nunca se dispara desde
-// su propio campo, para no pisar lo que estés escribiendo ahí mismo.
+// "Crédito disponible" (Crédito simple UV, Revolvente WH) ya NO es un
+// dato que se escriba a mano para que reste en la Deuda neta — es al
+// revés, se AUTO-CALCULA como el límite de esa línea (su "monto"
+// capturado en Líneas de crédito) menos la Deuda neta que se acaba de
+// resolver — mismo criterio que "Saldo disponible línea de crédito" en
+// el tab Saldos.
+// Caso especial Revolvente UV (ver esRevolventeUV): aquí Crédito
+// disponible = Revolvente (el saldo de ESTA línea capturado en este
+// mismo registro) − Disposición — no se usa el límite de Líneas de
+// crédito ni la Deuda neta (que en esta línea siempre da $0).
+// En los tres casos, el campo sigue siendo editable (por si algún día
+// hace falta ajustarlo a mano), pero se recalcula solo cada vez que
+// cambian el Saldo o el Pago capital — nunca se dispara desde su propio
+// campo, para no pisar lo que estés escribiendo ahí mismo.
 function actualizarCreditoDisponible(card, registro) {
   const disponibleEl = card.querySelector('[data-campo="efectivo"]');
   if (!disponibleEl) return;
-  const deuda = parseMXN(card.querySelector('[data-campo="deuda"]').textContent);
-  const empresaId = empresaDeLinea(registro.lineaId);
-  const lineaObj = (lineasCreditoPorEmpresa[empresaId] || []).find(l => l.id === registro.lineaId);
-  const limite = parseMXN(lineaObj ? lineaObj.monto : 0);
-  const disponible = limite - deuda;
+
+  let disponible;
+  if (esRevolventeUV(registro.lineaId)) {
+    const revolvente   = parseMXN((registro.saldos && registro.saldos[registro.lineaId]) || '');
+    const disposicion  = parseMXN(card.querySelector('[data-campo="total"]').textContent);
+    disponible = revolvente - disposicion;
+  } else {
+    const deuda = parseMXN(card.querySelector('[data-campo="deuda"]').textContent);
+    const empresaId = empresaDeLinea(registro.lineaId);
+    const lineaObj = (lineasCreditoPorEmpresa[empresaId] || []).find(l => l.id === registro.lineaId);
+    const limite = parseMXN(lineaObj ? lineaObj.monto : 0);
+    disponible = limite - deuda;
+  }
   disponibleEl.textContent = formatMXN(disponible);
   registro.efectivo = disponibleEl.textContent;
 }
@@ -9972,7 +10026,17 @@ async function agregarRegistroMensual(lineaId) {
   // en $0.00 aquí, pero se sobreescribe de inmediato más abajo
   // (crearRegistroMensual → actualizarCreditoDisponible) con su valor
   // auto-calculado: límite de la línea − Deuda neta.
-  const saldoInicial = anterior ? formatMXN(calcularDeudaDeRegistro(anterior)) : formatMXN(0);
+  //
+  // Caso especial Revolvente UV (ver esRevolventeUV): en esta línea la
+  // "Deuda neta" siempre da $0 por diseño (Disposición − Pago capital,
+  // y Disposición está ligada a Pago capital) — así que NO tendría
+  // sentido heredarla como saldo. En vez de eso, el "Revolvente"
+  // (saldo/capacidad de la línea) se mantiene igual al del mes anterior
+  // — es un dato que normalmente no cambia mes a mes, a diferencia de
+  // Crédito simple UV o Revolvente WH, donde el saldo sí va bajando.
+  const saldoInicial = esRevolventeUV(lineaId)
+    ? (anterior && anterior.saldos && anterior.saldos[lineaId] ? anterior.saldos[lineaId] : formatMXN(0))
+    : (anterior ? formatMXN(calcularDeudaDeRegistro(anterior)) : formatMXN(0));
 
   const registro = {
     id, lineaId,
@@ -10088,6 +10152,7 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
     const encontrada = (lineasCreditoPorEmpresa[emp] || []).find(l => l.id === lineaId);
     if (encontrada) { linea = encontrada; break; }
   }
+  const especial = esRevolventeUV(lineaId);
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
@@ -10100,8 +10165,26 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
       : parseMXN(linea ? linea.monto : 0);
     const disponible = f.esReg ? parseMXN(f.registro.efectivo) : null;
     const pago       = f.esReg ? parseMXN(f.registro.pago) : null;
-    // Deuda neta histórica: misma regla que en el registro en vivo —
-    // "Crédito disponible" ya no resta (ver calcularDeudaDeRegistro).
+
+    if (especial) {
+      // Caso especial Revolvente UV: Disposición = Pago capital (ligado
+      // 1:1) → Deuda neta = Disposición − Pago capital = $0 siempre.
+      const disposicion = f.esReg ? pago : null;
+      const deuda = f.esReg ? (disposicion || 0) - (pago || 0) : saldo;
+      return `
+        <tr>
+          <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
+          <td>${escapeHTML(formatMXN(saldo))}</td>
+          <td>${disposicion === null ? '—' : escapeHTML(formatMXN(disposicion))}</td>
+          <td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>
+          <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
+          <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
+        </tr>`;
+    }
+
+    // Deuda neta histórica (resto de líneas): misma regla que en el
+    // registro en vivo — "Crédito disponible" ya no resta (ver
+    // calcularDeudaDeRegistro).
     const deuda = f.esReg ? saldo - (pago || 0) : saldo;
     return `
       <tr>
@@ -10119,7 +10202,8 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
         <thead>
           <tr>
             <th class="grp-acum-matrix-empresa">Mes</th>
-            <th>Saldo</th>
+            <th>${especial ? 'Revolvente' : 'Saldo'}</th>
+            ${especial ? '<th>Disposición</th>' : ''}
             <th>Crédito disponible</th>
             <th>Pago capital</th>
             <th>Deuda neta pendiente</th>
@@ -10189,11 +10273,26 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
     }, 0);
   };
 
+  // Deuda neta combinada: se suma la Deuda neta YA RESUELTA de cada
+  // línea por separado (no "Total − Pago capital" a lo bruto), porque
+  // Revolvente UV calcula la suya distinto a las demás (ver
+  // esRevolventeUV/calcularDeudaDeRegistro: en esa línea siempre da $0).
+  const deudaDeFila = (f) => {
+    if (!f.esReg) return valoresDeFila(f).reduce((s, v) => s + (v || 0), 0); // "Monto original": sin abonos todavía
+    return lineasEmp.reduce((s, l) => {
+      const r = registroDeLinea(l.id, f.etiqueta);
+      if (!r) return s;
+      if (esRevolventeUV(l.id)) return s; // Disposición − Pago capital = 0, siempre
+      const saldo = r.saldos && r.saldos[l.id] !== undefined ? parseMXN(r.saldos[l.id]) : 0;
+      return s + (saldo - parseMXN(r.pago));
+    }, 0);
+  };
+
   const filasHTML = filas.map(f => {
     const valores = valoresDeFila(f);
     const total   = valores.reduce((s, v) => s + (v || 0), 0);
     const pago    = pagoDeFila(f);
-    const deuda   = f.esReg ? total - pago : total;
+    const deuda   = deudaDeFila(f);
     const pagoCapital = f.esReg ? pago : null;
     return `
       <tr>
@@ -10303,15 +10402,24 @@ async function entrarTabCreditosGrupo() {
     // neta — ver calcularDeudaDeRegistro). Pago capital combinado: suma
     // de lo capturado en cada línea (cada una guarda lo suyo por
     // separado, así que aquí sí se suma sin riesgo de doble conteo).
-    let efectivo = 0, pago = 0;
+    // Deuda neta combinada: se suma la Deuda neta YA RESUELTA de cada
+    // línea (no "Total − Pago" a lo bruto), porque Revolvente UV la
+    // calcula distinto a las demás (ver esRevolventeUV: en esa línea
+    // siempre da $0).
+    let efectivo = 0, pago = 0, deuda = 0;
     columnas.forEach(c => {
       const reg = registroDe(c.id, etiqueta);
       if (reg) {
         efectivo += parseMXN(reg.efectivo);
         pago += parseMXN(reg.pago);
+        if (!esRevolventeUV(c.id)) {
+          const saldo = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
+          deuda += saldo - parseMXN(reg.pago);
+        }
+        // Revolvente UV no suma nada aquí: su Deuda neta siempre es $0.
       }
     });
-    return { etiqueta, celdas, efectivo, pago };
+    return { etiqueta, celdas, efectivo, pago, deuda };
   });
 
   const totalDe = (celdas) => celdas.reduce((sum, v) => sum + (v || 0), 0);
@@ -10320,7 +10428,7 @@ async function entrarTabCreditosGrupo() {
     const total = totalDe(fila.celdas);
     const efectivo = fila.esOriginal ? null : fila.efectivo;
     const pago      = fila.esOriginal ? null : fila.pago;
-    const deuda     = fila.esOriginal ? total : total - pago;
+    const deuda     = fila.esOriginal ? total : fila.deuda;
     const etiquetaTxt = fila.esOriginal ? 'Monto original' : fila.etiqueta;
     return `
       <tr>
