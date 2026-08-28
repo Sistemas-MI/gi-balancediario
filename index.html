@@ -9535,23 +9535,29 @@ function empresaDeLinea(lineaId) {
   return null;
 }
 
-// ── Caso especial: Revolvente UV (Unveil) ──
-// A petición explícita, SOLO esta línea usa una mecánica distinta a
-// todas las demás (Crédito simple UV, Revolvente WH): en vez de
-// "Total préstamo bancario" (suma del saldo capturado), su tarjeta
-// muestra "Disposición" — que queda SIEMPRE ligada 1:1 al valor de
-// Pago capital de ese mismo registro (si cambias Pago capital,
-// Disposición cambia con él, no es un campo aparte). A partir de ahí:
+// ── Modo "Disposición" (antes exclusivo de Revolvente UV; ahora
+// también Revolvente WH, a petición explícita, "para probar") ──
+// Las líneas en LINEAS_MODO_DISPOSICION usan una mecánica distinta a
+// las demás (Crédito simple UV, y cualquier otra que no esté en la
+// lista): en vez de "Total préstamo bancario" (suma del saldo
+// capturado), su tarjeta muestra "Disposición" — que queda SIEMPRE
+// ligada 1:1 al valor de Pago capital de ese mismo registro (si cambias
+// Pago capital, Disposición cambia con él, no es un campo aparte). A
+// partir de ahí:
 //   Crédito disponible = Revolvente (saldo de esta línea en el
 //                          registro) − Disposición
 //   Deuda neta          = Disposición − Pago capital  → por diseño da
-//                          siempre $0 en esta línea (confirmado).
+//                          siempre $0 en estas líneas (confirmado).
+// PARA REVERTIR una línea a la mecánica normal (Total préstamo = suma
+// del saldo, Crédito disponible = límite − Deuda neta, Deuda neta =
+// Saldo − Pago capital): basta con quitar su id de este arreglo — no
+// hace falta tocar nada más en el resto del código.
 // Ver crearRegistroMensual, recalcularRegistroMensual,
 // actualizarCreditoDisponible, calcularDeudaDeRegistro,
 // construirTablaSeguimientoLineaHTML y construirTablaSeguimientoLineasHTML.
-const LINEA_REVOLVENTE_UV_ID = 'lc_uv_revolvente';
+const LINEAS_MODO_DISPOSICION = ['lc_uv_revolvente', 'lc_wh_revolvente'];
 function esRevolventeUV(lineaId) {
-  return lineaId === LINEA_REVOLVENTE_UV_ID;
+  return LINEAS_MODO_DISPOSICION.includes(lineaId);
 }
 
 // ── Caso especial: Crédito simple UV (Unveil) ──
