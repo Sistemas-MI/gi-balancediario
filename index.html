@@ -9554,6 +9554,16 @@ function esRevolventeUV(lineaId) {
   return lineaId === LINEA_REVOLVENTE_UV_ID;
 }
 
+// ── Caso especial: Crédito simple UV (Unveil) ──
+// A petición explícita: en esta línea "Crédito disponible" no aplica
+// (es un crédito simple, no una línea revolvente con capacidad
+// disponible) — se deja fijo en $0.00 siempre, y se le quita del todo
+// la columna en su tabla de "Seguimiento mes a mes".
+const LINEA_CREDITO_SIMPLE_UV_ID = 'lc_uv_simple';
+function esCreditoSimpleUV(lineaId) {
+  return lineaId === LINEA_CREDITO_SIMPLE_UV_ID;
+}
+
 // ── Persistencia (Supabase) ──
 function creditoLineaFilaDB(linea, empresaId, orden) {
   return {
@@ -9935,17 +9945,20 @@ function recalcularRegistroMensual(card, registro) {
   renderSeguimientoLinea(registro.lineaId);
 }
 
-// "Crédito disponible" (Crédito simple UV, Revolvente WH) ya NO es un
-// dato que se escriba a mano para que reste en la Deuda neta — es al
-// revés, se AUTO-CALCULA como el límite de esa línea (su "monto"
-// capturado en Líneas de crédito) menos la Deuda neta que se acaba de
-// resolver — mismo criterio que "Saldo disponible línea de crédito" en
-// el tab Saldos.
+// "Crédito disponible" (Revolvente WH) ya NO es un dato que se escriba
+// a mano para que reste en la Deuda neta — es al revés, se
+// AUTO-CALCULA como el límite de esa línea (su "monto" capturado en
+// Líneas de crédito) menos la Deuda neta que se acaba de resolver —
+// mismo criterio que "Saldo disponible línea de crédito" en el tab
+// Saldos.
 // Caso especial Revolvente UV (ver esRevolventeUV): aquí Crédito
 // disponible = Revolvente (el saldo de ESTA línea capturado en este
 // mismo registro) − Disposición — no se usa el límite de Líneas de
 // crédito ni la Deuda neta (que en esta línea siempre da $0).
-// En los tres casos, el campo sigue siendo editable (por si algún día
+// Caso especial Crédito simple UV (ver esCreditoSimpleUV): aquí
+// "Crédito disponible" no aplica (es un crédito simple, no una línea
+// revolvente) — se deja fijo en $0.00 siempre.
+// En todos los casos el campo sigue siendo editable (por si algún día
 // hace falta ajustarlo a mano), pero se recalcula solo cada vez que
 // cambian el Saldo o el Pago capital — nunca se dispara desde su propio
 // campo, para no pisar lo que estés escribiendo ahí mismo.
@@ -9958,6 +9971,8 @@ function actualizarCreditoDisponible(card, registro) {
     const revolvente   = parseMXN((registro.saldos && registro.saldos[registro.lineaId]) || '');
     const disposicion  = parseMXN(card.querySelector('[data-campo="total"]').textContent);
     disponible = revolvente - disposicion;
+  } else if (esCreditoSimpleUV(registro.lineaId)) {
+    disponible = 0;
   } else {
     const deuda = parseMXN(card.querySelector('[data-campo="deuda"]').textContent);
     const empresaId = empresaDeLinea(registro.lineaId);
@@ -10152,7 +10167,8 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
     const encontrada = (lineasCreditoPorEmpresa[emp] || []).find(l => l.id === lineaId);
     if (encontrada) { linea = encontrada; break; }
   }
-  const especial = esRevolventeUV(lineaId);
+  const especial   = esRevolventeUV(lineaId);
+  const sinDisponible = esCreditoSimpleUV(lineaId); // sin columna "Crédito disponible" — a petición explícita
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
@@ -10190,7 +10206,7 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
       <tr>
         <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
         <td>${escapeHTML(formatMXN(saldo))}</td>
-        <td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>
+        ${sinDisponible ? '' : `<td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>`}
         <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
         <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
       </tr>`;
@@ -10204,7 +10220,7 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
             <th class="grp-acum-matrix-empresa">Mes</th>
             <th>${especial ? 'Revolvente' : 'Saldo'}</th>
             ${especial ? '<th>Disposición</th>' : ''}
-            <th>Crédito disponible</th>
+            ${sinDisponible ? '' : '<th>Crédito disponible</th>'}
             <th>Pago capital</th>
             <th>Deuda neta pendiente</th>
           </tr>
