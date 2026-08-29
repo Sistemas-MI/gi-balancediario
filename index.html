@@ -7591,6 +7591,9 @@ function calcularSincroniaLinea(lineaId) {
 function crearTarjetaLineaCreditoSaldos(linea) {
   const wrap = document.createElement('div');
   wrap.className = 'saldos-linea-credito-tarjeta';
+  // "Saldo disponible línea de crédito" se quitó SOLO de Crédito simple
+  // UV (a petición explícita) — Revolvente UV sí la conserva.
+  const conDisponible = !esCreditoSimpleUV(linea.id);
   wrap.innerHTML = `
     <p class="sec-label bold saldos-subtitulo">Línea de crédito — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
     <div class="saldos-resumen">
@@ -7602,16 +7605,24 @@ function crearTarjetaLineaCreditoSaldos(linea) {
         <span class="saldos-resumen-label">Deuda de la línea de crédito</span>
         <span class="saldos-resumen-monto" data-auto="true">—</span>
       </div>
+      ${conDisponible ? `
+      <div class="saldos-resumen-fila">
+        <span class="saldos-resumen-label">Saldo disponible línea de crédito</span>
+        <span class="saldos-resumen-monto" data-auto="true">—</span>
+      </div>` : ''}
     </div>`;
 
-  const [montoEl, deudaEl] = wrap.querySelectorAll('.saldos-resumen-monto');
+  const montos = wrap.querySelectorAll('.saldos-resumen-monto');
+  const montoEl = montos[0], deudaEl = montos[1], dispEl = montos[2];
   const sync = calcularSincroniaLinea(linea.id);
   if (sync) {
     montoEl.textContent = formatMXN(sync.monto);
     deudaEl.textContent = formatMXN(sync.deuda);
+    if (dispEl) dispEl.textContent = formatMXN(sync.monto - sync.deuda);
   } else {
     montoEl.textContent = '—';
     deudaEl.textContent = '—';
+    if (dispEl) dispEl.textContent = '—';
   }
   return wrap;
 }
