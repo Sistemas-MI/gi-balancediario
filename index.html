@@ -10145,13 +10145,7 @@ function crearModuloLinea(linea) {
   const wrap = document.createElement('div');
   wrap.className = 'creditos-linea-modulo';
   wrap.dataset.lineaId = linea.id;
-  // Nota del módulo: en Revolvente WH los nombres de "Disposición" y
-  // "Crédito disponible" están invertidos a propósito (ver
-  // crearRegistroMensual) — el texto de ayuda se ajusta para no
-  // contradecirlo.
-  const notaRegistro = linea.id === 'lc_wh_revolvente'
-    ? 'Uno por mes: el saldo de esta línea y Pago capital — Disposición se calcula sola.'
-    : 'Uno por mes: el saldo de esta línea y Pago capital — Crédito disponible se calcula solo.';
+  const notaRegistro = 'Uno por mes: el saldo de esta línea y Pago capital — Crédito disponible se calcula solo.';
   wrap.innerHTML = `
     <div class="ornamento">— · —</div>
     <div class="sec-header-row">
