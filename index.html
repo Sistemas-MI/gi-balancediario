@@ -10299,16 +10299,16 @@ function nombreEmpresaGrp(id) {
   return (CREDITOS_GRP_EMPRESAS.find(e => e.id === id) || {}).nombre || '';
 }
 
-// Columnas (líneas de crédito) en el orden del Excel: primero las
-// líneas "revolvente" de cada empresa, luego el resto.
+// Columnas (líneas de crédito): agrupadas por empresa (Unveil primero,
+// luego Warehouse Rentals), respetando el orden en que cada empresa
+// tiene capturadas sus líneas — Revolvente UV, Crédito simple UV,
+// Revolvente WH.
 function creditosGrpColumnas() {
   const columnas = [];
   CREDITOS_GRP_EMPRESAS.forEach(emp => {
     (lineasCreditoPorEmpresa[emp.id] || []).forEach(l => columnas.push({ ...l, empresaId: emp.id }));
   });
-  const revolventes = columnas.filter(c => /revolvente/i.test(c.nombre || ''));
-  const otras       = columnas.filter(c => !/revolvente/i.test(c.nombre || ''));
-  return [...revolventes, ...otras];
+  return columnas;
 }
 
 // Etiquetas de mes (ej. "Agosto 2026"), en el orden en que se
@@ -10442,6 +10442,10 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
   if (lineasEmp.length === 0) {
     return '<p class="creditos-vacio">Agrega al menos una línea de crédito para ver el seguimiento</p>';
   }
+  // Con una sola línea (ej. WH: solo Revolvente WH), "Total préstamo"
+  // es idéntico a la única columna de línea — redundante, se quita. Con
+  // 2+ líneas (ej. Unveil) sí suma algo distinto, así que se conserva.
+  const mostrarTotal = lineasEmp.length > 1;
 
   const registroDeLinea = (lineaId, etiqueta) => {
     const key = etiqueta.trim().toLowerCase();
@@ -10504,7 +10508,7 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
       <tr>
         <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
         ${valores.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
-        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>
+        ${mostrarTotal ? `<td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>` : ''}
         <td>${pagoCapital === null ? '—' : escapeHTML(formatMXN(pagoCapital))}</td>
         <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
       </tr>`;
@@ -10518,7 +10522,7 @@ function construirTablaSeguimientoLineasHTML(empresaId, tituloOpcional) {
           <tr>
             <th class="grp-acum-matrix-empresa">Mes</th>
             ${lineasEmp.map(l => `<th>${escapeHTML(l.nombre || 'Línea')}</th>`).join('')}
-            <th>Total préstamo</th>
+            ${mostrarTotal ? '<th>Total préstamo</th>' : ''}
             <th>Pago capital</th>
             <th>Deuda neta pendiente</th>
           </tr>
@@ -10589,6 +10593,21 @@ async function entrarTabCreditosGrupo() {
   };
 
   // ── 1) Desglose por línea, con el registro más reciente de cada una ──
+  // "Crédito disponible" y "Disposición" que de verdad se ven en
+  // pantalla para una línea — en Revolvente WH esos dos nombres están
+  // invertidos a propósito (misma regla que ya usan la tarjeta de
+  // Registro mensual y la tabla de Seguimiento mes a mes), así que aquí
+  // hay que leer el campo correcto según la línea, no siempre el mismo.
+  const nombresInvertidosDe = (lineaId) => lineaId === 'lc_wh_revolvente';
+  const creditoDisponibleMostrado = (reg, lineaId) => {
+    if (!reg) return 0;
+    return parseMXN(nombresInvertidosDe(lineaId) ? reg.disposicion : reg.efectivo);
+  };
+  const disposicionMostrada = (reg, lineaId) => {
+    if (!reg) return 0;
+    return parseMXN(nombresInvertidosDe(lineaId) ? reg.efectivo : reg.disposicion);
+  };
+
   const lineaCardHTML = (c) => {
     const reg = ultimoRegistroDe(c.id);
     if (!reg) {
@@ -10600,7 +10619,12 @@ async function entrarTabCreditosGrupo() {
         </div>`;
     }
     const saldo   = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
-    const disp    = parseMXN(reg.efectivo);
+    // "Disposición" solo aplica a las líneas revolventes (Revolvente UV
+    // y Revolvente WH) — Crédito simple UV no tiene ese concepto, igual
+    // que en el tab Créditos.
+    const conDisposicion = esRevolventeUV(c.id);
+    const disposicion = conDisposicion ? disposicionMostrada(reg, c.id) : null;
+    const disp    = creditoDisponibleMostrado(reg, c.id);
     const pago    = parseMXN(reg.pago);
     const deuda   = calcularDeudaDeRegistro(reg);
     return `
@@ -10608,6 +10632,7 @@ async function entrarTabCreditosGrupo() {
         <p class="creditos-grp-linea-titulo">${escapeHTML(c.nombre || 'Línea')}</p>
         <p class="creditos-grp-linea-empresa">${escapeHTML(nombreEmpresaGrp(c.empresaId))} · ${escapeHTML(reg.etiqueta || 'Sin etiqueta')}</p>
         <div class="creditos-grp-linea-fila"><span class="lbl">Saldo</span><span class="val">${escapeHTML(formatMXN(saldo))}</span></div>
+        ${conDisposicion ? `<div class="creditos-grp-linea-fila"><span class="lbl">Disposición</span><span class="val">${escapeHTML(formatMXN(disposicion))}</span></div>` : ''}
         <div class="creditos-grp-linea-fila"><span class="lbl">Crédito disponible</span><span class="val">${escapeHTML(formatMXN(disp))}</span></div>
         <div class="creditos-grp-linea-fila"><span class="lbl">Pago capital</span><span class="val">${escapeHTML(formatMXN(pago))}</span></div>
         <div class="creditos-grp-linea-fila destacada"><span class="lbl">Deuda neta</span><span class="val">${escapeHTML(formatMXN(deuda))}</span></div>
@@ -10620,7 +10645,7 @@ async function entrarTabCreditosGrupo() {
     if (!reg) return acc;
     const saldo = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
     acc.saldo += saldo;
-    acc.disp  += parseMXN(reg.efectivo);
+    acc.disp  += creditoDisponibleMostrado(reg, c.id);
     acc.pago  += parseMXN(reg.pago);
     acc.deuda += calcularDeudaDeRegistro(reg);
     return acc;
@@ -10628,10 +10653,10 @@ async function entrarTabCreditosGrupo() {
 
   cont.innerHTML = `
     <div class="creditos-grp-totales">
-      <div class="creditos-grp-total-pill"><span class="lbl">Total préstamo</span><span class="val">${escapeHTML(formatMXN(totales.saldo))}</span></div>
-      <div class="creditos-grp-total-pill"><span class="lbl">Crédito disponible</span><span class="val">${escapeHTML(formatMXN(totales.disp))}</span></div>
-      <div class="creditos-grp-total-pill"><span class="lbl">Pago capital</span><span class="val">${escapeHTML(formatMXN(totales.pago))}</span></div>
-      <div class="creditos-grp-total-pill"><span class="lbl">Deuda neta</span><span class="val">${escapeHTML(formatMXN(totales.deuda))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Total préstamos</span><span class="val">${escapeHTML(formatMXN(totales.saldo))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Créditos disponibles</span><span class="val">${escapeHTML(formatMXN(totales.disp))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Pagos capital</span><span class="val">${escapeHTML(formatMXN(totales.pago))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Deudas netas</span><span class="val">${escapeHTML(formatMXN(totales.deuda))}</span></div>
     </div>
 
     <p class="sec-label bold" style="margin:0 0 2px">Desglose por línea — mes más reciente</p>
