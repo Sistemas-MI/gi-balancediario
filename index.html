@@ -9915,10 +9915,12 @@ function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
     <span class="creditos-campo-label">${escapeHTML(nombreLinea || 'Línea sin nombre')}</span>
     <span class="creditos-campo-valor" contenteditable="true" data-linea="${lineaId}">${escapeHTML(registro.saldos[lineaId] || formatMXN(0))}</span>
   `;
-  // Los 4 campos fijos (total/efectivo/pago/deuda) van siempre al
-  // final — las columnas de saldo se insertan justo antes de ellas.
-  const totalCampo = grid.querySelector('.campo-total');
-  grid.insertBefore(div, totalCampo);
+  // El saldo/"Revolvente" va siempre PRIMERO en la tarjeta (antes de
+  // Disposición/Total/Crédito disponible/Pago capital/Deuda neta) —
+  // se ancla al primer hijo del grid en vez de buscar ".campo-total"
+  // (que puede no existir, como en Crédito simple UV, o venir después
+  // en el orden visual, como en Revolvente WH tras el reacomodo).
+  grid.insertBefore(div, grid.firstChild);
 
   const valorEl = div.querySelector('[data-linea]');
   valorEl.addEventListener('paste', e => {
@@ -9946,25 +9948,39 @@ function crearRegistroMensual(registro) {
   // "Disposición" y "Crédito disponible" estaban invertidas — se
   // intercambian aquí nada más el nombre visible; los campos, sus
   // valores y sus fórmulas siguen exactamente igual (Revolvente UV no
-  // se toca, conserva el orden normal).
+  // se toca, conserva el orden normal). Además, en el ORDEN VISUAL de
+  // la tarjeta (nada más de acomodo, sin tocar ningún cálculo): junto
+  // a "Revolvente WH" va primero "Disposición" y luego "Crédito
+  // disponible" — ver más abajo donde se arma el mini-grid.
   const nombresInvertidos = registro.lineaId === 'lc_wh_revolvente';
   const labelTotal    = modoDisposicion ? (nombresInvertidos ? 'Crédito disponible' : 'Disposición') : 'Total préstamo bancario';
   const labelDisponible = nombresInvertidos ? 'Disposición' : 'Crédito disponible';
+  // A petición explícita: en Crédito simple UV se quitan del todo los
+  // campos "Total préstamo bancario" y "Crédito disponible" — no se
+  // muestran ni existen en el DOM. La Deuda neta (Saldo − Pago capital)
+  // NO depende de ninguno de los dos (ver recalcularRegistroMensual:
+  // el "Total" ahí es solo un espejo informativo del saldo, y "Crédito
+  // disponible" ya estaba fijo en $0 y fuera de la fórmula desde antes
+  // — ver esCreditoSimpleUV), así que quitarlos no cambia ningún cálculo.
+  const sinTotalNiDisponible = esCreditoSimpleUV(registro.lineaId);
   const card = document.createElement('div');
   card.className = 'credito-registro-card';
   card.dataset.registroId = registro.id;
+  const bloqueTotal = sinTotalNiDisponible ? '' : `
+      <div class="creditos-campo campo-total">
+        <span class="creditos-campo-label">${labelTotal}</span>
+        <span class="creditos-campo-valor" ${modoDisposicion ? 'contenteditable="true"' : 'data-auto="true"'} data-campo="total">${modoDisposicion ? escapeHTML(registro.disposicion || formatMXN(0)) : '$0'}</span>
+      </div>`;
+  const bloqueDisponible = sinTotalNiDisponible ? '' : `
+      <div class="creditos-campo">
+        <span class="creditos-campo-label">${labelDisponible}</span>
+        <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
+      </div>`;
   card.innerHTML = `
     <span class="credito-row-remove creditos-registro-remove" title="Quitar este registro">×</span>
     <p class="credito-registro-etiqueta" contenteditable="true" data-placeholder="Mes o fecha de este registro (ej. Agosto 2026)">${escapeHTML(registro.etiqueta || '')}</p>
     <div class="creditos-mini-grid">
-      <div class="creditos-campo campo-total">
-        <span class="creditos-campo-label">${labelTotal}</span>
-        <span class="creditos-campo-valor" ${modoDisposicion ? 'contenteditable="true"' : 'data-auto="true"'} data-campo="total">${modoDisposicion ? escapeHTML(registro.disposicion || formatMXN(0)) : '$0'}</span>
-      </div>
-      <div class="creditos-campo">
-        <span class="creditos-campo-label">${labelDisponible}</span>
-        <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
-      </div>
+      ${nombresInvertidos ? bloqueDisponible + bloqueTotal : bloqueTotal + bloqueDisponible}
       <div class="creditos-campo">
         <span class="creditos-campo-label">Pago capital</span>
         <span class="creditos-campo-valor" contenteditable="true" data-campo="pago">${escapeHTML(registro.pago || formatMXN(0))}</span>
@@ -9992,6 +10008,7 @@ function crearRegistroMensual(registro) {
 
   ['efectivo', 'pago'].forEach(campo => {
     const el = card.querySelector(`[data-campo="${campo}"]`);
+    if (!el) return; // Crédito simple UV ya no tiene "Crédito disponible" en el DOM
     el.addEventListener('paste', e => {
       e.preventDefault();
       const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
@@ -10073,7 +10090,10 @@ function recalcularRegistroMensual(card, registro) {
     card.querySelectorAll('.creditos-campo-saldo [data-linea]').forEach(el => {
       totalSaldos += parseMXN(el.textContent);
     });
-    totalEl.textContent = formatMXN(totalSaldos);
+    // Crédito simple UV ya no tiene el campo "Total préstamo bancario"
+    // visible en el DOM — se sigue calculando totalSaldos igual (para
+    // que la Deuda neta no cambie), solo que ya no hay dónde mostrarlo.
+    if (totalEl) totalEl.textContent = formatMXN(totalSaldos);
     deuda = totalSaldos - pago;
   }
 
@@ -10320,6 +10340,15 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
   }
   const especial   = esRevolventeUV(lineaId);
   const sinDisponible = esCreditoSimpleUV(lineaId); // sin columna "Crédito disponible" — a petición explícita
+  // Mismo criterio que en la tarjeta de Registro mensual: en Revolvente
+  // WH los nombres visibles de "Disposición" y "Crédito disponible"
+  // están invertidos (a petición explícita) — aquí se replica SOLO en
+  // qué columna se muestra cada valor, para que ambas pantallas digan
+  // lo mismo bajo el mismo nombre. La Deuda neta NUNCA se ve afectada
+  // por este intercambio: siempre se calcula con el valor real de
+  // "Disposición" (el campo de verdad, sin importar cómo se llame en
+  // pantalla), igual que en la tarjeta.
+  const nombresInvertidos = lineaId === 'lc_wh_revolvente';
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
@@ -10336,15 +10365,24 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
     if (especial) {
       // Caso especial Revolvente UV/WH: Disposición y Pago capital son
       // datos propios, independientes → Deuda neta = Disposición −
-      // Pago capital (ya varía de verdad, no siempre da $0).
+      // Pago capital (ya varía de verdad, no siempre da $0). Se usa
+      // SIEMPRE el valor real del campo "Disposición" (registro.disposicion),
+      // nunca el que se muestra en pantalla tras el intercambio de abajo.
       const disposicion = f.esReg ? parseMXN(f.registro.disposicion) : null;
       const deuda = f.esReg ? (disposicion || 0) - (pago || 0) : saldo;
+
+      // Columnas a mostrar: en Revolvente WH se intercambian (mismo
+      // intercambio visual que ya tiene la tarjeta), en Revolvente UV
+      // se quedan igual que siempre.
+      const colDisposicion   = nombresInvertidos ? disponible  : disposicion;
+      const colCreditoDisp   = nombresInvertidos ? disposicion : disponible;
+
       return `
         <tr>
           <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
           <td>${escapeHTML(formatMXN(saldo))}</td>
-          <td>${disposicion === null ? '—' : escapeHTML(formatMXN(disposicion))}</td>
-          <td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>
+          <td>${colDisposicion === null ? '—' : escapeHTML(formatMXN(colDisposicion))}</td>
+          <td>${colCreditoDisp === null ? '—' : escapeHTML(formatMXN(colCreditoDisp))}</td>
           <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
           <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
         </tr>`;
