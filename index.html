@@ -3993,6 +3993,92 @@
   }
   .grp-acum-matrix tbody tr.is-total:hover td { background: var(--cafe); }
 
+  /* ── "Créditos bancarios — Grupo": franja de totales + tarjetas por
+     línea, para ver de un vistazo de dónde sale cada peso (antes todo
+     se apretaba en columnas extra dentro de la matriz de arriba, lo que
+     confundía al sumar Pago capital/Crédito disponible de líneas muy
+     distintas en un solo número sin desglose). ── */
+  .creditos-grp-totales {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0 22px;
+  }
+  .creditos-grp-total-pill {
+    flex: 1 1 150px;
+    background: var(--cafe);
+    border-radius: 4px;
+    padding: 12px 14px 11px;
+  }
+  .creditos-grp-total-pill .lbl {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,.65);
+    margin-bottom: 3px;
+  }
+  .creditos-grp-total-pill .val {
+    font-family: 'EB Garamond', serif;
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--dorado);
+  }
+  .creditos-grp-lineas-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 4px;
+  }
+  .creditos-grp-linea-card {
+    flex: 1 1 210px;
+    background: #fff;
+    border: 1px solid var(--linea);
+    border-radius: 4px;
+    padding: 12px 14px 10px;
+  }
+  .creditos-grp-linea-titulo {
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--cafe);
+    margin: 0 0 2px;
+  }
+  .creditos-grp-linea-empresa {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--suave);
+    margin: 0 0 8px;
+  }
+  .creditos-grp-linea-fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--crema-dark);
+  }
+  .creditos-grp-linea-fila:last-child { border-bottom: none; }
+  .creditos-grp-linea-fila .lbl {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    color: var(--suave);
+    white-space: nowrap;
+  }
+  .creditos-grp-linea-fila .val {
+    font-family: 'EB Garamond', serif;
+    font-size: 13px;
+    color: var(--texto);
+    font-weight: 500;
+    text-align: right;
+  }
+  .creditos-grp-linea-fila.destacada .val {
+    color: var(--cafe);
+    font-weight: 600;
+  }
+
   /* ── Rango libre "Desde / Hasta" (modo Personalizado) ──
      Misma tarjeta blanca con trazo --linea que el resto del módulo;
      selects reutilizan .mes-select (idéntico al selector de mes del
@@ -10167,6 +10253,9 @@ const CREDITOS_GRP_EMPRESAS = [
   { id: 'unveil', nombre: 'Unveil' },
   { id: 'nmh_baja_sur', nombre: 'Warehouse Rentals' },
 ];
+function nombreEmpresaGrp(id) {
+  return (CREDITOS_GRP_EMPRESAS.find(e => e.id === id) || {}).nombre || '';
+}
 
 // Columnas (líneas de crédito) en el orden del Excel: primero las
 // líneas "revolvente" de cada empresa, luego el resto.
@@ -10443,63 +10532,72 @@ async function entrarTabCreditosGrupo() {
     const key = etiqueta.trim().toLowerCase();
     return (registrosMensualesPorLinea[lineaId] || []).find(r => (r.etiqueta || '').trim().toLowerCase() === key);
   };
-
-  // Fila "Monto original": lo dispersado de cada línea, sin abonos.
-  const filaOriginal = { esOriginal: true, celdas: columnas.map(c => parseMXN(c.monto)) };
-
-  // Una fila por cada mes ya registrado (en cualquiera de las líneas de
-  // ambas empresas), tomando el saldo propio de cada línea para ese mes.
-  const filasMeses = etiquetas.map(etiqueta => {
-    const celdas = columnas.map(c => {
-      const reg = registroDe(c.id, etiqueta);
-      return reg && reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : null;
-    });
-    // Crédito disponible combinado: suma de lo que cada línea trae
-    // auto-calculado (puramente informativo, ya no resta en la Deuda
-    // neta — ver calcularDeudaDeRegistro). Pago capital combinado: suma
-    // de lo capturado en cada línea (cada una guarda lo suyo por
-    // separado, así que aquí sí se suma sin riesgo de doble conteo).
-    // Deuda neta combinada: se suma la Deuda neta YA RESUELTA de cada
-    // línea (no "Total − Pago" a lo bruto), porque Revolvente UV/WH la
-    // calculan distinto a las demás (Disposición − Pago capital, ver
-    // esRevolventeUV/calcularDeudaDeRegistro).
-    let efectivo = 0, pago = 0, deuda = 0;
-    columnas.forEach(c => {
-      const reg = registroDe(c.id, etiqueta);
-      if (reg) {
-        efectivo += parseMXN(reg.efectivo);
-        pago += parseMXN(reg.pago);
-        if (esRevolventeUV(c.id)) {
-          deuda += parseMXN(reg.disposicion) - parseMXN(reg.pago);
-        } else {
-          const saldo = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
-          deuda += saldo - parseMXN(reg.pago);
-        }
-      }
-    });
-    return { etiqueta, celdas, efectivo, pago, deuda };
-  });
-
-  const totalDe = (celdas) => celdas.reduce((sum, v) => sum + (v || 0), 0);
-
-  const filaHTML = (fila) => {
-    const total = totalDe(fila.celdas);
-    const efectivo = fila.esOriginal ? null : fila.efectivo;
-    const pago      = fila.esOriginal ? null : fila.pago;
-    const deuda     = fila.esOriginal ? total : fila.deuda;
-    const etiquetaTxt = fila.esOriginal ? 'Monto original' : fila.etiqueta;
-    return `
-      <tr>
-        <td class="grp-acum-matrix-empresa">${escapeHTML(etiquetaTxt)}</td>
-        ${fila.celdas.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
-        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(total))}</td>
-        <td>${efectivo === null ? '—' : escapeHTML(formatMXN(efectivo))}</td>
-        <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
-        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
-      </tr>`;
+  const ultimoRegistroDe = (lineaId) => {
+    const regs = registrosMensualesPorLinea[lineaId] || [];
+    return regs.length ? regs[regs.length - 1] : null;
   };
 
+  // ── 1) Evolución del SALDO mes a mes, por línea ──
+  // Solo saldo y total — el desglose de Crédito disponible/Pago
+  // capital/Deuda neta se movió a las tarjetas de abajo, una por línea,
+  // para no sumar en una sola columna cosas de líneas muy distintas sin
+  // mostrar de dónde sale cada peso (eso es lo que generaba confusión).
+  const filaOriginal = { esOriginal: true, celdas: columnas.map(c => parseMXN(c.monto)) };
+  const filasMeses = etiquetas.map(etiqueta => ({
+    etiqueta,
+    celdas: columnas.map(c => {
+      const reg = registroDe(c.id, etiqueta);
+      return reg && reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : null;
+    }),
+  }));
+  const totalDe = (celdas) => celdas.reduce((sum, v) => sum + (v || 0), 0);
+  const filaHTML = (fila) => `
+      <tr>
+        <td class="grp-acum-matrix-empresa">${escapeHTML(fila.esOriginal ? 'Monto original' : fila.etiqueta)}</td>
+        ${fila.celdas.map(v => `<td>${v === null ? '—' : escapeHTML(formatMXN(v))}</td>`).join('')}
+        <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(totalDe(fila.celdas)))}</td>
+      </tr>`;
+
+  // ── 2) Desglose por línea, con el registro más reciente de cada una ──
+  const lineaCardHTML = (c) => {
+    const reg = ultimoRegistroDe(c.id);
+    if (!reg) {
+      return `
+        <div class="creditos-grp-linea-card">
+          <p class="creditos-grp-linea-titulo">${escapeHTML(c.nombre || 'Línea')}</p>
+          <p class="creditos-grp-linea-empresa">${escapeHTML(nombreEmpresaGrp(c.empresaId))}</p>
+          <p class="creditos-vacio" style="padding:4px 0;text-align:left">Sin registro mensual capturado</p>
+        </div>`;
+    }
+    const saldo   = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
+    const disp    = parseMXN(reg.efectivo);
+    const pago    = parseMXN(reg.pago);
+    const deuda   = calcularDeudaDeRegistro(reg);
+    return `
+      <div class="creditos-grp-linea-card">
+        <p class="creditos-grp-linea-titulo">${escapeHTML(c.nombre || 'Línea')}</p>
+        <p class="creditos-grp-linea-empresa">${escapeHTML(nombreEmpresaGrp(c.empresaId))} · ${escapeHTML(reg.etiqueta || 'Sin etiqueta')}</p>
+        <div class="creditos-grp-linea-fila"><span class="lbl">Saldo</span><span class="val">${escapeHTML(formatMXN(saldo))}</span></div>
+        <div class="creditos-grp-linea-fila"><span class="lbl">Crédito disponible</span><span class="val">${escapeHTML(formatMXN(disp))}</span></div>
+        <div class="creditos-grp-linea-fila"><span class="lbl">Pago capital</span><span class="val">${escapeHTML(formatMXN(pago))}</span></div>
+        <div class="creditos-grp-linea-fila destacada"><span class="lbl">Deuda neta</span><span class="val">${escapeHTML(formatMXN(deuda))}</span></div>
+      </div>`;
+  };
+
+  // ── 3) Totales del grupo: suma del registro más reciente de CADA línea ──
+  const totales = columnas.reduce((acc, c) => {
+    const reg = ultimoRegistroDe(c.id);
+    if (!reg) return acc;
+    const saldo = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
+    acc.saldo += saldo;
+    acc.disp  += parseMXN(reg.efectivo);
+    acc.pago  += parseMXN(reg.pago);
+    acc.deuda += calcularDeudaDeRegistro(reg);
+    return acc;
+  }, { saldo: 0, disp: 0, pago: 0, deuda: 0 });
+
   cont.innerHTML = `
+    <p class="creditos-parte-nota">Evolución del saldo por línea, mes a mes.</p>
     <div class="grp-acum-matrix-wrap">
       <table class="grp-acum-matrix">
         <thead>
@@ -10507,9 +10605,6 @@ async function entrarTabCreditosGrupo() {
             <th class="grp-acum-matrix-empresa">—</th>
             ${columnas.map(c => `<th>${escapeHTML(c.nombre || 'Línea')}</th>`).join('')}
             <th>Total préstamo</th>
-            <th>Crédito disp.</th>
-            <th>Pago capital</th>
-            <th>Deuda neta</th>
           </tr>
         </thead>
         <tbody>
@@ -10518,6 +10613,19 @@ async function entrarTabCreditosGrupo() {
         </tbody>
       </table>
     </div>
+
+    <div class="creditos-grp-totales">
+      <div class="creditos-grp-total-pill"><span class="lbl">Total préstamo</span><span class="val">${escapeHTML(formatMXN(totales.saldo))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Crédito disponible</span><span class="val">${escapeHTML(formatMXN(totales.disp))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Pago capital</span><span class="val">${escapeHTML(formatMXN(totales.pago))}</span></div>
+      <div class="creditos-grp-total-pill"><span class="lbl">Deuda neta</span><span class="val">${escapeHTML(formatMXN(totales.deuda))}</span></div>
+    </div>
+
+    <p class="sec-label bold" style="margin:0 0 2px">Desglose por línea — mes más reciente</p>
+    <div class="creditos-grp-lineas-grid">
+      ${columnas.map(lineaCardHTML).join('')}
+    </div>
+
     ${creditosInfoFijaHTML(columnas)}
     ${CREDITOS_GRP_EMPRESAS.map(emp => construirTablaSeguimientoLineasHTML(emp.id, `${emp.id === 'nmh_baja_sur' ? 'WH' : emp.nombre} — seguimiento mes a mes`)).join('')}`;
 }
