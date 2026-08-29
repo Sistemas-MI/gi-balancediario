@@ -7649,14 +7649,12 @@ function sincronizarLineaCreditoDesdeCreditos() {
 }
 
 // A partir del historial de UNA línea de crédito (registrosMensualesPorLinea),
-// calcula su "Línea de crédito" (monto/capacidad) y su "Deuda de la
-// línea de crédito" — normalmente Saldo − Pago capital ("Crédito
-// disponible" ya no resta aquí, ver calcularDeudaDeRegistro en el tab
-// Créditos). Caso especial Revolvente UV/WH (ver esRevolventeUV): aquí
-// "Deuda de la línea de crédito" = Disposición (dato propio, editable en
-// Créditos) en vez de Saldo − Pago capital — así esta tarjeta en Saldos
-// queda consistente con "Crédito disponible" del tab Créditos (monto −
-// deuda = revolvente − disposición, igual allá).
+// calcula su "Línea de crédito" (el Saldo/Revolvente de esa línea en su
+// registro más reciente) y su "Deuda de la línea de crédito" — para
+// Revolvente UV/WH (ver esRevolventeUV), es la Deuda neta ya resuelta
+// del registro mensual (Disposición − Pago capital, calcularDeudaDeRegistro,
+// misma que se ve en Créditos > Registro mensual); para el resto de
+// líneas sigue siendo Saldo − Pago capital.
 // Devuelve null si esa línea todavía no tiene ningún registro mensual
 // capturado en el tab Créditos — así el que llama decide qué mostrar
 // (guion, o simplemente no forzar nada).
@@ -7665,7 +7663,7 @@ function calcularSincroniaLinea(lineaId) {
   const ultimo = registros.length ? registros[registros.length - 1] : null;
   if (!ultimo) return null;
   const monto = Object.values(ultimo.saldos || {}).reduce((s, v) => s + parseMXN(v), 0);
-  const deuda = esRevolventeUV(lineaId) ? parseMXN(ultimo.disposicion) : monto - parseMXN(ultimo.pago);
+  const deuda = esRevolventeUV(lineaId) ? calcularDeudaDeRegistro(ultimo) : monto - parseMXN(ultimo.pago);
   return { monto, deuda };
 }
 
