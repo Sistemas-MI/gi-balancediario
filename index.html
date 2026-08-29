@@ -10095,8 +10095,9 @@ function recalcularRegistroMensual(card, registro) {
 // Saldos.
 // Caso especial Revolvente UV/WH (ver esRevolventeUV): aquí Crédito
 // disponible = Revolvente (el saldo de ESTA línea capturado en este
-// mismo registro) − Disposición — no se usa el límite de Líneas de
-// crédito ni la Deuda neta.
+// mismo registro) − Deuda neta (Disposición − Pago capital, ya resuelta
+// por recalcularRegistroMensual justo antes de llamar aquí) — no se usa
+// el límite de Líneas de crédito ni la Disposición directamente.
 // Caso especial Crédito simple UV (ver esCreditoSimpleUV): aquí
 // "Crédito disponible" no aplica (es un crédito simple, no una línea
 // revolvente) — se deja fijo en $0.00 siempre.
@@ -10111,9 +10112,9 @@ function actualizarCreditoDisponible(card, registro) {
 
   let disponible;
   if (esRevolventeUV(registro.lineaId)) {
-    const revolvente   = parseMXN((registro.saldos && registro.saldos[registro.lineaId]) || '');
-    const disposicion  = parseMXN(card.querySelector('[data-campo="total"]').textContent);
-    disponible = revolvente - disposicion;
+    const revolvente = parseMXN((registro.saldos && registro.saldos[registro.lineaId]) || '');
+    const deuda      = parseMXN(card.querySelector('[data-campo="deuda"]').textContent);
+    disponible = revolvente - deuda;
   } else if (esCreditoSimpleUV(registro.lineaId)) {
     disponible = 0;
   } else {
