@@ -7644,7 +7644,14 @@ function sincronizarLineaCreditoDesdeCreditos() {
   if (!sync) return; // sin registros mensuales todavía: no se fuerza nada
 
   lineaEl.textContent = formatMXN(sync.monto);
-  deudaEl.textContent = formatMXN(sync.deuda);
+  // A petición explícita: en Warehouse Rentals "Deuda de la línea de
+  // crédito" y "Saldo disponible línea de crédito" mostraban los
+  // montos cruzados — se intercambian aquí (solo WH; Revolvente UV no
+  // se toca, ver crearTarjetaLineaCreditoSaldos), sin cambiar el orden
+  // de las filas: "Deuda" sigue siendo la primera fila, solo cambia el
+  // número que le corresponde.
+  const deudaMostrada = sync.monto - sync.deuda;
+  deudaEl.textContent = formatMXN(deudaMostrada);
   recalcularSaldoDisponibleCredito();
 }
 
@@ -9935,6 +9942,14 @@ function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
 
 function crearRegistroMensual(registro) {
   const modoDisposicion = esRevolventeUV(registro.lineaId);
+  // A petición explícita: SOLO en Revolvente WH, las etiquetas
+  // "Disposición" y "Crédito disponible" estaban invertidas — se
+  // intercambian aquí nada más el nombre visible; los campos, sus
+  // valores y sus fórmulas siguen exactamente igual (Revolvente UV no
+  // se toca, conserva el orden normal).
+  const nombresInvertidos = registro.lineaId === 'lc_wh_revolvente';
+  const labelTotal    = modoDisposicion ? (nombresInvertidos ? 'Crédito disponible' : 'Disposición') : 'Total préstamo bancario';
+  const labelDisponible = nombresInvertidos ? 'Disposición' : 'Crédito disponible';
   const card = document.createElement('div');
   card.className = 'credito-registro-card';
   card.dataset.registroId = registro.id;
@@ -9943,11 +9958,11 @@ function crearRegistroMensual(registro) {
     <p class="credito-registro-etiqueta" contenteditable="true" data-placeholder="Mes o fecha de este registro (ej. Agosto 2026)">${escapeHTML(registro.etiqueta || '')}</p>
     <div class="creditos-mini-grid">
       <div class="creditos-campo campo-total">
-        <span class="creditos-campo-label">${modoDisposicion ? 'Disposición' : 'Total préstamo bancario'}</span>
+        <span class="creditos-campo-label">${labelTotal}</span>
         <span class="creditos-campo-valor" ${modoDisposicion ? 'contenteditable="true"' : 'data-auto="true"'} data-campo="total">${modoDisposicion ? escapeHTML(registro.disposicion || formatMXN(0)) : '$0'}</span>
       </div>
       <div class="creditos-campo">
-        <span class="creditos-campo-label">Crédito disponible</span>
+        <span class="creditos-campo-label">${labelDisponible}</span>
         <span class="creditos-campo-valor" contenteditable="true" data-campo="efectivo">${escapeHTML(registro.efectivo || formatMXN(0))}</span>
       </div>
       <div class="creditos-campo">
@@ -10125,13 +10140,20 @@ function crearModuloLinea(linea) {
   const wrap = document.createElement('div');
   wrap.className = 'creditos-linea-modulo';
   wrap.dataset.lineaId = linea.id;
+  // Nota del módulo: en Revolvente WH los nombres de "Disposición" y
+  // "Crédito disponible" están invertidos a propósito (ver
+  // crearRegistroMensual) — el texto de ayuda se ajusta para no
+  // contradecirlo.
+  const notaRegistro = linea.id === 'lc_wh_revolvente'
+    ? 'Uno por mes: el saldo de esta línea y Pago capital — Disposición se calcula sola.'
+    : 'Uno por mes: el saldo de esta línea y Pago capital — Crédito disponible se calcula solo.';
   wrap.innerHTML = `
     <div class="ornamento">— · —</div>
     <div class="sec-header-row">
       <p class="sec-label bold" style="margin:0">Registro mensual — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
       <button class="btn-add-circular btn-agregar-registro-linea" type="button" title="Agregar registro del mes">+</button>
     </div>
-    <p class="creditos-parte-nota">Uno por mes: el saldo de esta línea y Pago capital — Crédito disponible se calcula solo.</p>
+    <p class="creditos-parte-nota">${notaRegistro}</p>
     <div class="registros-mensuales-linea-cont"></div>
     <p class="creditos-vacio registros-mensuales-linea-vacio">Sin registros mensuales — dale al "+" para agregar el de este mes</p>
     <p class="sec-label bold" style="margin:16px 0 2px">Seguimiento mes a mes — ${escapeHTML(linea.nombre || 'Línea sin nombre')}</p>
