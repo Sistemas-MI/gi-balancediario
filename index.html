@@ -7644,14 +7644,7 @@ function sincronizarLineaCreditoDesdeCreditos() {
   if (!sync) return; // sin registros mensuales todavía: no se fuerza nada
 
   lineaEl.textContent = formatMXN(sync.monto);
-  // A petición explícita: en Warehouse Rentals "Deuda de la línea de
-  // crédito" y "Saldo disponible línea de crédito" mostraban los
-  // montos cruzados — se intercambian aquí (solo WH; Revolvente UV no
-  // se toca, ver crearTarjetaLineaCreditoSaldos), sin cambiar el orden
-  // de las filas: "Deuda" sigue siendo la primera fila, solo cambia el
-  // número que le corresponde.
-  const deudaMostrada = sync.monto - sync.deuda;
-  deudaEl.textContent = formatMXN(deudaMostrada);
+  deudaEl.textContent = formatMXN(sync.deuda);
   recalcularSaldoDisponibleCredito();
 }
 
@@ -9944,17 +9937,8 @@ function agregarColumnaSaldoARegistro(card, registro, lineaId, nombreLinea) {
 
 function crearRegistroMensual(registro) {
   const modoDisposicion = esRevolventeUV(registro.lineaId);
-  // A petición explícita: SOLO en Revolvente WH, las etiquetas
-  // "Disposición" y "Crédito disponible" estaban invertidas — se
-  // intercambian aquí nada más el nombre visible; los campos, sus
-  // valores y sus fórmulas siguen exactamente igual (Revolvente UV no
-  // se toca, conserva el orden normal). Además, en el ORDEN VISUAL de
-  // la tarjeta (nada más de acomodo, sin tocar ningún cálculo): junto
-  // a "Revolvente WH" va primero "Disposición" y luego "Crédito
-  // disponible" — ver más abajo donde se arma el mini-grid.
-  const nombresInvertidos = registro.lineaId === 'lc_wh_revolvente';
-  const labelTotal    = modoDisposicion ? (nombresInvertidos ? 'Crédito disponible' : 'Disposición') : 'Total préstamo bancario';
-  const labelDisponible = nombresInvertidos ? 'Disposición' : 'Crédito disponible';
+  const labelTotal    = modoDisposicion ? 'Disposición' : 'Total préstamo bancario';
+  const labelDisponible = 'Crédito disponible';
   // A petición explícita: en Crédito simple UV se quitan del todo los
   // campos "Total préstamo bancario" y "Crédito disponible" — no se
   // muestran ni existen en el DOM. La Deuda neta (Saldo − Pago capital)
@@ -9980,7 +9964,8 @@ function crearRegistroMensual(registro) {
     <span class="credito-row-remove creditos-registro-remove" title="Quitar este registro">×</span>
     <p class="credito-registro-etiqueta" contenteditable="true" data-placeholder="Mes o fecha de este registro (ej. Agosto 2026)">${escapeHTML(registro.etiqueta || '')}</p>
     <div class="creditos-mini-grid">
-      ${nombresInvertidos ? bloqueDisponible + bloqueTotal : bloqueTotal + bloqueDisponible}
+      ${bloqueTotal}
+      ${bloqueDisponible}
       <div class="creditos-campo">
         <span class="creditos-campo-label">Pago capital</span>
         <span class="creditos-campo-valor" contenteditable="true" data-campo="pago">${escapeHTML(registro.pago || formatMXN(0))}</span>
@@ -10340,15 +10325,6 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
   }
   const especial   = esRevolventeUV(lineaId);
   const sinDisponible = esCreditoSimpleUV(lineaId); // sin columna "Crédito disponible" — a petición explícita
-  // Mismo criterio que en la tarjeta de Registro mensual: en Revolvente
-  // WH los nombres visibles de "Disposición" y "Crédito disponible"
-  // están invertidos (a petición explícita) — aquí se replica SOLO en
-  // qué columna se muestra cada valor, para que ambas pantallas digan
-  // lo mismo bajo el mismo nombre. La Deuda neta NUNCA se ve afectada
-  // por este intercambio: siempre se calcula con el valor real de
-  // "Disposición" (el campo de verdad, sin importar cómo se llame en
-  // pantalla), igual que en la tarjeta.
-  const nombresInvertidos = lineaId === 'lc_wh_revolvente';
   const registros = registrosMensualesPorLinea[lineaId] || [];
   const filas = [
     { etiqueta: 'Monto original', esReg: false },
@@ -10365,24 +10341,16 @@ function construirTablaSeguimientoLineaHTML(lineaId) {
     if (especial) {
       // Caso especial Revolvente UV/WH: Disposición y Pago capital son
       // datos propios, independientes → Deuda neta = Disposición −
-      // Pago capital (ya varía de verdad, no siempre da $0). Se usa
-      // SIEMPRE el valor real del campo "Disposición" (registro.disposicion),
-      // nunca el que se muestra en pantalla tras el intercambio de abajo.
+      // Pago capital (ya varía de verdad, no siempre da $0).
       const disposicion = f.esReg ? parseMXN(f.registro.disposicion) : null;
       const deuda = f.esReg ? (disposicion || 0) - (pago || 0) : saldo;
-
-      // Columnas a mostrar: en Revolvente WH se intercambian (mismo
-      // intercambio visual que ya tiene la tarjeta), en Revolvente UV
-      // se quedan igual que siempre.
-      const colDisposicion   = nombresInvertidos ? disponible  : disposicion;
-      const colCreditoDisp   = nombresInvertidos ? disposicion : disponible;
 
       return `
         <tr>
           <td class="grp-acum-matrix-empresa">${escapeHTML(f.etiqueta)}</td>
           <td>${escapeHTML(formatMXN(saldo))}</td>
-          <td>${colDisposicion === null ? '—' : escapeHTML(formatMXN(colDisposicion))}</td>
-          <td>${colCreditoDisp === null ? '—' : escapeHTML(formatMXN(colCreditoDisp))}</td>
+          <td>${disposicion === null ? '—' : escapeHTML(formatMXN(disposicion))}</td>
+          <td>${disponible === null ? '—' : escapeHTML(formatMXN(disponible))}</td>
           <td>${pago === null ? '—' : escapeHTML(formatMXN(pago))}</td>
           <td class="grp-acum-matrix-total">${escapeHTML(formatMXN(deuda))}</td>
         </tr>`;
@@ -10593,20 +10561,11 @@ async function entrarTabCreditosGrupo() {
   };
 
   // ── 1) Desglose por línea, con el registro más reciente de cada una ──
-  // "Crédito disponible" y "Disposición" que de verdad se ven en
-  // pantalla para una línea — en Revolvente WH esos dos nombres están
-  // invertidos a propósito (misma regla que ya usan la tarjeta de
-  // Registro mensual y la tabla de Seguimiento mes a mes), así que aquí
-  // hay que leer el campo correcto según la línea, no siempre el mismo.
-  const nombresInvertidosDe = (lineaId) => lineaId === 'lc_wh_revolvente';
-  const creditoDisponibleMostrado = (reg, lineaId) => {
-    if (!reg) return 0;
-    return parseMXN(nombresInvertidosDe(lineaId) ? reg.disposicion : reg.efectivo);
-  };
-  const disposicionMostrada = (reg, lineaId) => {
-    if (!reg) return 0;
-    return parseMXN(nombresInvertidosDe(lineaId) ? reg.efectivo : reg.disposicion);
-  };
+  // "Crédito disponible" y "Disposición" de una línea — se leen tal
+  // cual del registro, sin ningún intercambio: el mismo campo que
+  // "Crédito disponible" en el tab Créditos de esa empresa.
+  const creditoDisponibleMostrado = (reg) => reg ? parseMXN(reg.efectivo) : 0;
+  const disposicionMostrada = (reg) => reg ? parseMXN(reg.disposicion) : 0;
 
   const lineaCardHTML = (c) => {
     const reg = ultimoRegistroDe(c.id);
@@ -10623,8 +10582,8 @@ async function entrarTabCreditosGrupo() {
     // y Revolvente WH) — Crédito simple UV no tiene ese concepto, igual
     // que en el tab Créditos.
     const conDisposicion = esRevolventeUV(c.id);
-    const disposicion = conDisposicion ? disposicionMostrada(reg, c.id) : null;
-    const disp    = creditoDisponibleMostrado(reg, c.id);
+    const disposicion = conDisposicion ? disposicionMostrada(reg) : null;
+    const disp    = creditoDisponibleMostrado(reg);
     const pago    = parseMXN(reg.pago);
     const deuda   = calcularDeudaDeRegistro(reg);
     return `
@@ -10645,7 +10604,7 @@ async function entrarTabCreditosGrupo() {
     if (!reg) return acc;
     const saldo = reg.saldos && reg.saldos[c.id] !== undefined ? parseMXN(reg.saldos[c.id]) : 0;
     acc.saldo += saldo;
-    acc.disp  += creditoDisponibleMostrado(reg, c.id);
+    acc.disp  += creditoDisponibleMostrado(reg);
     acc.pago  += parseMXN(reg.pago);
     acc.deuda += calcularDeudaDeRegistro(reg);
     return acc;
