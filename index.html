@@ -6121,8 +6121,12 @@ async function registrarEdicion(empresa_id, campo, valor_nuevo) {
 // ── Cargar todos los campos de una empresa para el periodo activo ──
 // Si el periodo ya tiene datos guardados, se usan directamente (sin modificar).
 // Si es un mes nuevo sin datos aún, se copia el mes anterior COMPLETO como punto
-// de partida — todos los campos, sin excepción. El usuario verá exactamente lo
-// mismo que el último día del mes anterior y podrá editarlo desde ahí.
+// de partida — todos los campos, sin excepción (incluida la tabla de Saldos) —
+// el usuario verá exactamente lo mismo que el último día del mes anterior y
+// podrá agregar/editar/quitar desde ahí. Editar en el mes nuevo SIEMPRE guarda
+// en el mes nuevo (ver guardarCampo: la llave es empresa+año+mes+campo), así
+// que el mes anterior nunca se modifica por esto, sin importar qué se le
+// agregue o quite al mes nuevo después de copiarlo.
 async function cargarEmpresa(empresa_id) {
   const rows = await sbRequest('GET',
     `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${periodoAnio}&mes=eq.${periodoMes}&select=campo,valor`
@@ -6149,18 +6153,6 @@ async function cargarEmpresa(empresa_id) {
     if (rowsPrev && rowsPrev.length > 0) {
       const mapa = {};
       rowsPrev.forEach(r => {
-        // "Saldos" (cuentas bancarias + resumen de crédito/saldo total) NO
-        // se hereda del mes anterior — a diferencia del resto del balance
-        // (cobrado, notas, plan, situación de crédito, etc.), un mes nuevo
-        // siempre debe arrancar con la tabla de Saldos vacía, ya que los
-        // saldos bancarios cambian mes a mes y no tiene sentido arrastrar
-        // los del mes pasado como si ya aplicaran al nuevo.
-        const esCampoDeSaldos = r.campo === 'saldos_ids'
-          || r.campo === 'saldos_deuda_credito'
-          || r.campo === 'saldos_disponible_credito'
-          || r.campo === 'saldos_linea_credito_monto'
-          || r.campo.indexOf('saldo_') === 0;
-        if (esCampoDeSaldos) return;
         mapa[r.campo] = r.valor;
       });
 
