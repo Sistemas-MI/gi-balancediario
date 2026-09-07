@@ -3639,6 +3639,30 @@
     line-height: 1.2;
   }
   .wh-presupuesto-monto:focus { background: rgba(92,46,26,.05); border-radius: 3px; }
+  /* Fila que envuelve el monto — permite el "chip" de % al lado sin
+     tocar el tamaño del monto en sí. */
+  .wh-presupuesto-monto-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  /* Qué tanto representan los ingresos de los vendedores (Cobrado)
+     contra este mismo Presupuesto — mismos 4 tonos que ya usa el % de
+     avance por vendedor (pct-meta/ok/medio/alerta), pero en formato
+     "chip" chico para no competir visualmente con el monto grande. */
+  .wh-presupuesto-monto-pct {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 9px;
+    white-space: nowrap;
+  }
+  .wh-presupuesto-monto-pct.pct-meta   { color: var(--dorado); background: var(--dorado-xs); }
+  .wh-presupuesto-monto-pct.pct-ok     { color: var(--cafe);   background: var(--cafe-xs); }
+  .wh-presupuesto-monto-pct.pct-medio  { color: #7A6020;       background: rgba(122,96,32,.10); }
+  .wh-presupuesto-monto-pct.pct-alerta { color: #8C2010;       background: rgba(140,32,16,.08); }
   .wh-presupuesto-sub {
     font-family: 'Inter', sans-serif;
     font-size: 11.5px;
@@ -5287,7 +5311,10 @@
       <!-- Solo lectura: el monto se toma de "Presupuesto del mes"
            (Balance Mensual → campo "presupuesto"), se captura ahí una
            sola vez y aquí solo se refleja (ver renderWHPresupuesto()). -->
-      <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
+      <div class="wh-presupuesto-monto-row">
+        <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
+        <span class="wh-presupuesto-monto-pct" id="whPresupuestoMontoPct" title="Lo que ya cobraron entre todos los vendedores, contra el presupuesto">0%</span>
+      </div>
       <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
       <p class="wh-presupuesto-nota">Nota: el % es lo que cada quien ya cobró contra lo que le tocaría cobrar según el presupuesto.</p>
       <div class="wh-presupuesto-lista" id="whPresupuestoLista">
@@ -6132,41 +6159,125 @@ async function cargarEmpresa(empresa_id) {
     `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${periodoAnio}&mes=eq.${periodoMes}&select=campo,valor`
   );
 
-  // Si ya hay datos guardados para este periodo, usarlos tal cual (no se modifican)
+  let mapa = {};
+  let esNuevo = false;
+
   if (rows && rows.length > 0) {
-    const mapa = {};
+    // Ya hay datos guardados para este periodo: se usan tal cual (no se
+    // modifican) — salvo el Desglose, que se revisa aparte más abajo
+    // (ver propagarDesglosePendientes), sin importar que el mes ya
+    // tenga otros datos propios.
     rows.forEach(r => { mapa[r.campo] = r.valor; });
-    return mapa;
+  } else {
+    // Mes sin datos todavía: buscar el mes anterior y copiarlo completo.
+    // Todos los campos se heredan tal cual — cobrado, por cobrar, notas,
+    // meta, plan de ataque, situación de crédito — sin reiniciar nada.
+    const mesPrev  = periodoMes === 1 ? 12 : periodoMes - 1;
+    const anioPrev = periodoMes === 1 ? periodoAnio - 1 : periodoAnio;
+
+    try {
+      const rowsPrev = await sbRequest('GET',
+        `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${anioPrev}&mes=eq.${mesPrev}&select=campo,valor`
+      );
+      if (rowsPrev && rowsPrev.length > 0) {
+        rowsPrev.forEach(r => { mapa[r.campo] = r.valor; });
+        esNuevo = true;
+      }
+    } catch(e) {
+      console.warn('No se pudo cargar mes anterior para herencia:', e);
+    }
   }
 
-  // Mes sin datos todavía: buscar el mes anterior y copiarlo completo.
-  // Todos los campos se heredan tal cual — cobrado, por cobrar, notas,
-  // meta, plan de ataque, situación de crédito — sin reiniciar nada.
+  // Desglose: arrastra al mes actual cualquier renglón que en el mes
+  // anterior siga "Pendiente" (sin marcar Pagado) — a diferencia del
+  // resto del balance (que solo se copia UNA VEZ al abrir un mes vacío),
+  // esto corre siempre, sin importar si el mes ya tenía sus propios
+  // datos — ver propagarDesglosePendientes.
+  try {
+    await propagarDesglosePendientes(empresa_id, mapa);
+  } catch(e) {
+    console.warn('propagarDesglosePendientes error:', e);
+  }
+
+  // Marcar que estos datos vienen del mes anterior (no son datos guardados aún)
+  if (esNuevo) mapa['__copiado_de_mes_anterior__'] = true;
+  return mapa;
+}
+
+// ── Desglose: los renglones "Pendiente" se arrastran mes a mes ──
+// A diferencia del resto del balance (que solo se copia UNA VEZ, al
+// abrir un mes vacío por primera vez), un renglón del Desglose que
+// sigue sin marcarse "Pagado" en el mes anterior se vuelve a traer al
+// mes actual — y de ahí en adelante a cada mes siguiente — hasta que en
+// algún mes se marque como pagado (ahí deja de arrastrarse hacia
+// adelante). Aplica en las 5 empresas (misma tarjeta/datos en todas).
+//
+// Se guarda de inmediato en el mes actual (no se queda solo "de
+// vista"), para que la cadena no se rompa aunque el usuario se salte
+// un mes sin abrirlo — de lo contrario, al llegar al mes siguiente, la
+// búsqueda de "mes anterior" no encontraría nada real que arrastrar.
+//
+// Nunca duplica: si el id ya está en el mes actual (porque ya se había
+// arrastrado antes, o el usuario ya lo tiene ahí por su cuenta), se
+// deja tal cual — no se pisa su monto/descripción/estado actuales.
+async function propagarDesglosePendientes(empresa_id, mapaActual) {
   const mesPrev  = periodoMes === 1 ? 12 : periodoMes - 1;
   const anioPrev = periodoMes === 1 ? periodoAnio - 1 : periodoAnio;
 
+  let rowsPrev;
   try {
-    const rowsPrev = await sbRequest('GET',
+    rowsPrev = await sbRequest('GET',
       `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${anioPrev}&mes=eq.${mesPrev}&select=campo,valor`
     );
-
-    if (rowsPrev && rowsPrev.length > 0) {
-      const mapa = {};
-      rowsPrev.forEach(r => {
-        mapa[r.campo] = r.valor;
-      });
-
-
-      // Marcar que estos datos vienen del mes anterior (no son datos guardados aún)
-      mapa['__copiado_de_mes_anterior__'] = true;
-      return mapa;
-    }
   } catch(e) {
-    console.warn('No se pudo cargar mes anterior para herencia:', e);
+    console.warn('propagarDesglosePendientes: no se pudo leer el mes anterior:', e);
+    return;
   }
+  if (!rowsPrev || rowsPrev.length === 0) return;
 
-  // Sin datos en ningún mes anterior: devolver vacío (se aplican DEFAULTS)
-  return {};
+  const prevMapa = {};
+  rowsPrev.forEach(r => { prevMapa[r.campo] = r.valor; });
+
+  let idsPrev = [];
+  try { if (prevMapa['desglose_ids']) idsPrev = JSON.parse(prevMapa['desglose_ids']); } catch(e) { idsPrev = []; }
+  if (idsPrev.length === 0) return;
+
+  let idsActuales = [];
+  try { if (mapaActual['desglose_ids']) idsActuales = JSON.parse(mapaActual['desglose_ids']); } catch(e) { idsActuales = []; }
+
+  const filasNuevas = [];
+  let huboCambios = false;
+
+  idsPrev.forEach(id => {
+    const yaPagado = prevMapa[`desglose_${id}_pagado`] === 'true';
+    if (yaPagado) return;                    // ya se pagó en el mes anterior: no se arrastra
+    if (idsActuales.includes(id)) return;     // ya está en el mes actual: no se duplica ni se pisa
+
+    const desc  = prevMapa[`desglose_${id}_desc`]  || '';
+    const monto = prevMapa[`desglose_${id}_monto`] || '$0';
+    const ahora = new Date().toISOString();
+
+    idsActuales.push(id);
+    huboCambios = true;
+    mapaActual[`desglose_${id}_desc`]   = desc;
+    mapaActual[`desglose_${id}_monto`]  = monto;
+    mapaActual[`desglose_${id}_pagado`] = 'false';
+
+    filasNuevas.push({ empresa_id, anio: periodoAnio, mes: periodoMes, campo: `desglose_${id}_desc`,   valor: desc,    actualizado_en: ahora });
+    filasNuevas.push({ empresa_id, anio: periodoAnio, mes: periodoMes, campo: `desglose_${id}_monto`,  valor: monto,   actualizado_en: ahora });
+    filasNuevas.push({ empresa_id, anio: periodoAnio, mes: periodoMes, campo: `desglose_${id}_pagado`, valor: 'false', actualizado_en: ahora });
+  });
+
+  if (!huboCambios) return;
+
+  mapaActual['desglose_ids'] = JSON.stringify(idsActuales);
+  filasNuevas.push({ empresa_id, anio: periodoAnio, mes: periodoMes, campo: 'desglose_ids', valor: JSON.stringify(idsActuales), actualizado_en: new Date().toISOString() });
+
+  try {
+    await sbRequest('POST', '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo', filasNuevas);
+  } catch(e) {
+    console.error('propagarDesglosePendientes: error al guardar en el mes actual:', e);
+  }
 }
 
 function esValorVacio(valor) {
@@ -10924,6 +11035,23 @@ function renderWHPresupuesto() {
     const raw = (datos && datos[campo] !== undefined && datos[campo] !== '') ? datos[campo] : DEFAULTS[campo];
     return parseMXN(raw || '$0');
   };
+
+  // Chip de % junto al monto: cuánto representan los ingresos de los
+  // vendedores (activos) contra este mismo Presupuesto — mismos 4
+  // tonos que ya usa el % de avance de cada vendedor en la lista.
+  const totalCobradoActivos = activos.reduce((s, v) => s + cobradoDe(v.key), 0);
+  const pctPresupuesto = presupuestoTotal > 0 ? Math.round(totalCobradoActivos / presupuestoTotal * 100) : 0;
+  const pctMontoEl = document.getElementById('whPresupuestoMontoPct');
+  if (pctMontoEl) {
+    pctMontoEl.textContent = pctPresupuesto + '%';
+    pctMontoEl.title = `${formatMXN(totalCobradoActivos)} cobrados de ${formatMXN(presupuestoTotal)} de presupuesto`;
+    let claseMonto;
+    if (pctPresupuesto >= 100)      claseMonto = 'pct-meta';
+    else if (pctPresupuesto >= 80)  claseMonto = 'pct-ok';
+    else if (pctPresupuesto >= 50)  claseMonto = 'pct-medio';
+    else                            claseMonto = 'pct-alerta';
+    pctMontoEl.className = 'wh-presupuesto-monto-pct ' + claseMonto;
+  }
 
   // ── Tarjeta 1 "Presupuesto": monto ÷ 4 y % de avance por vendedor ──
   const lista = document.getElementById('whPresupuestoLista');
