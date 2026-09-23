@@ -10939,17 +10939,37 @@ function renderWHPorConseguir() {
     return parseMXN(raw || '$0');
   };
 
+  // CORRECCIÓN (bug real, validado): antes cada vendedor se comparaba
+  // SOLO contra su cuarta parte de la meta, topando su faltante en $0
+  // si la superaba — pero ese excedente nunca se usaba para compensar
+  // a los demás. Si alguien vendía muy por encima de su cuota (ej.
+  // Jaqueline con $1,748,157.83 contra una cuota de $663,871.36) y
+  // otro se quedaba muy corto, la SUMA de los 4 faltantes por separado
+  // terminaba siendo varias veces más grande que lo que en realidad le
+  // falta a la empresa completa para la meta — ej. mostraba
+  // $1,383,680.24 de faltante cuando la empresa ya iba al 89% de su
+  // meta y en realidad solo faltaban $299,393.77.
+  //
+  // Ahora el total SIEMPRE es el faltante real de la empresa (Meta −
+  // lo que ya cobraron entre todos, nunca negativo) — y ese total real
+  // se reparte entre los vendedores que van abajo de su cuota,
+  // proporcional a qué tan atrás va cada quien (así la suma de las 4
+  // filas coincide siempre, en pesos exactos, con el total de arriba;
+  // nadie que ya superó su cuota resta ni aporta a los demás, pero
+  // tampoco vuelve a inflar el total).
+  const cobradoTotalActivos = activos.reduce((s, v) => s + cobradoDe(v.key), 0);
+  const faltanteReal = Math.max(0, metaTotal - cobradoTotalActivos);
+  const crudoDe = activos.map(v => ({ v, crudo: Math.max(0, metaIndividual - cobradoDe(v.key)) }));
+  const sumaCruda = crudoDe.reduce((s, x) => s + x.crudo, 0);
+
   grid.innerHTML = '';
   let totalFalta = 0;
-  activos.forEach(v => {
+  crudoDe.forEach(({ v, crudo }) => {
     const cobrado = cobradoDe(v.key);
-    // Proporcional a lo cobrado: si ya alcanzó o superó su cuota, $0
-    // de faltante — nunca negativo.
-    const falta = Math.max(0, metaIndividual - cobrado);
+    const falta = sumaCruda > 0 ? faltanteReal * (crudo / sumaCruda) : 0;
     totalFalta += falta;
-    // La barra ahora muestra su AVANCE real hacia su propia cuota
-    // (antes siempre se veía al 100%, porque las 4 partes eran
-    // idénticas por definición; ya no lo son).
+    // La barra sigue mostrando el AVANCE real de cada quien contra su
+    // propia cuota — eso no cambia, solo el monto en pesos de "falta".
     const pct = metaIndividual > 0 ? Math.min(Math.round(cobrado / metaIndividual * 100), 100) : 0;
 
     const row = document.createElement('div');
@@ -10976,11 +10996,11 @@ function renderWHPorConseguir() {
     });
   });
 
-  // Se escribe hasta el final porque totalFalta se acumula fila por
-  // fila (ver arriba) — así la tarjeta de resumen SIEMPRE coincide con
-  // la suma real de lo que se ve en las 4 tarjetas de abajo, y nunca
-  // puede mostrar "$0" mientras las filas siguen mostrando faltante.
-  if (totalEl) totalEl.textContent = formatMXN(totalFalta);
+  // El total ahora es SIEMPRE el faltante real de la empresa (validado
+  // arriba) — y por construcción coincide, en pesos exactos, con la
+  // suma de las 4 filas (el reparto proporcional garantiza que sumen
+  // igual), así que nunca se puede inflar ni contradecir a las filas.
+  if (totalEl) totalEl.textContent = formatMXN(faltanteReal);
 }
 
 // ── PRESUPUESTO ── Tarjeta lateral, exclusiva de Warehouse Rentals
@@ -11091,13 +11111,30 @@ function renderWHPresupuesto() {
 
   // ── Tarjeta 2 "Faltante (presupuesto)": mismo diseño de fila, pero
   // mostrando el faltante en pesos en vez del %. ──
+  // CORRECCIÓN (mismo bug que ya se corrigió en "Faltante por
+  // vendedores"/renderWHPorConseguir, validado con datos reales): antes
+  // cada vendedor se comparaba solo contra su cuarta parte del
+  // presupuesto, topando su faltante en $0 si la superaba — ese
+  // excedente nunca compensaba a los demás, así que la SUMA de los 4
+  // faltantes por separado terminaba siendo mucho más grande que lo
+  // que en realidad le falta a la empresa para su presupuesto (ej.
+  // mostraba $2,269,541.65 cuando en realidad solo faltaban
+  // $1,480,542.32, con la empresa ya al 61.4% de su presupuesto).
+  //
+  // Ahora el total SIEMPRE es el faltante real (Presupuesto − lo que ya
+  // cobraron entre todos, nunca negativo), repartido entre los
+  // vendedores por debajo de su cuota de forma proporcional a qué tan
+  // atrás va cada quien — la suma de las 4 filas coincide siempre, en
+  // pesos exactos, con el total de arriba.
   if (faltaCard) {
     const faltaLista = document.getElementById('whPresupuestoFaltaLista');
-    let totalFaltaPresupuesto = 0;
-    const filasHTML = activos.map(v => {
+    const faltantePresupuestoReal = Math.max(0, presupuestoTotal - totalCobradoActivos);
+    const crudoPresupuestoDe = activos.map(v => ({ v, crudo: Math.max(0, porVendedor - cobradoDe(v.key)) }));
+    const sumaCrudaPresupuesto = crudoPresupuestoDe.reduce((s, x) => s + x.crudo, 0);
+
+    const filasHTML = crudoPresupuestoDe.map(({ v, crudo }) => {
       const cobrado = cobradoDe(v.key);
-      const falta   = Math.max(0, porVendedor - cobrado);
-      totalFaltaPresupuesto += falta;
+      const falta   = sumaCrudaPresupuesto > 0 ? faltantePresupuestoReal * (crudo / sumaCrudaPresupuesto) : 0;
       const pct = porVendedor > 0 ? Math.min(Math.round(cobrado / porVendedor * 100), 100) : 0;
       const anchoBarra = Math.max(Math.min(pct, 100), 0);
       const cumplido = falta <= 0;
@@ -11117,7 +11154,7 @@ function renderWHPresupuesto() {
 
     if (faltaLista) faltaLista.innerHTML = filasHTML;
     const totalEl = document.getElementById('whPresupuestoFaltaTotal');
-    if (totalEl) totalEl.textContent = formatMXN(totalFaltaPresupuesto);
+    if (totalEl) totalEl.textContent = formatMXN(faltantePresupuestoReal);
   }
 }
 
