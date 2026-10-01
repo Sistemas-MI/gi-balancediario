@@ -6199,6 +6199,16 @@ async function cargarEmpresa(empresa_id) {
     console.warn('propagarDesglosePendientes error:', e);
   }
 
+  // Saldos: si el mes actual todavía no tiene su propia tabla de Saldos
+  // capturada (sin importar que ya tenga otros datos propios — meta,
+  // notas, etc. — que es justo lo que antes impedía la copia), se trae
+  // la del mes anterior completa — ver propagarSaldosDesdeAnterior.
+  try {
+    await propagarSaldosDesdeAnterior(empresa_id, mapa);
+  } catch(e) {
+    console.warn('propagarSaldosDesdeAnterior error:', e);
+  }
+
   // Marcar que estos datos vienen del mes anterior (no son datos guardados aún)
   if (esNuevo) mapa['__copiado_de_mes_anterior__'] = true;
   return mapa;
@@ -6277,6 +6287,56 @@ async function propagarDesglosePendientes(empresa_id, mapaActual) {
     await sbRequest('POST', '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo', filasNuevas);
   } catch(e) {
     console.error('propagarDesglosePendientes: error al guardar en el mes actual:', e);
+  }
+}
+
+// ── Saldos: se copian del mes anterior, mes a mes ──
+// Igual que propagarDesglosePendientes, esto corre SIEMPRE al cargar
+// una empresa — sin importar si el mes actual ya tenía otros datos
+// propios guardados (meta, notas, presupuesto, etc.), que es justo lo
+// que antes impedía que la copia automática de "mes vacío" alcanzara a
+// la tabla de Saldos.
+//
+// Solo copia si el mes actual TODAVÍA no tiene su propia tabla de
+// Saldos (sin "saldos_ids" propio) — si ya la tiene (aunque sea de una
+// copia anterior, o capturada a mano), no se toca nada: nunca pisa lo
+// que ya hay en el mes actual, y nunca modifica el mes anterior (todo
+// se guarda con anio/mes del periodo ACTUAL).
+async function propagarSaldosDesdeAnterior(empresa_id, mapaActual) {
+  if (mapaActual['saldos_ids']) return; // el mes actual ya tiene su propia tabla de Saldos
+
+  const mesPrev  = periodoMes === 1 ? 12 : periodoMes - 1;
+  const anioPrev = periodoMes === 1 ? periodoAnio - 1 : periodoAnio;
+
+  let rowsPrev;
+  try {
+    rowsPrev = await sbRequest('GET',
+      `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresa_id)}&anio=eq.${anioPrev}&mes=eq.${mesPrev}&select=campo,valor`
+    );
+  } catch(e) {
+    console.warn('propagarSaldosDesdeAnterior: no se pudo leer el mes anterior:', e);
+    return;
+  }
+  if (!rowsPrev || rowsPrev.length === 0) return;
+
+  const esCampoDeSaldos = (campo) => campo === 'saldos_ids'
+    || campo === 'saldos_deuda_credito'
+    || campo === 'saldos_linea_credito_monto'
+    || campo.indexOf('saldo_') === 0;
+
+  const filasSaldosPrev = rowsPrev.filter(r => esCampoDeSaldos(r.campo));
+  if (filasSaldosPrev.length === 0) return; // esa empresa no tenía Saldos capturados el mes anterior
+
+  const ahora = new Date().toISOString();
+  const filasNuevas = filasSaldosPrev.map(r => {
+    mapaActual[r.campo] = r.valor;
+    return { empresa_id, anio: periodoAnio, mes: periodoMes, campo: r.campo, valor: r.valor, actualizado_en: ahora };
+  });
+
+  try {
+    await sbRequest('POST', '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo', filasNuevas);
+  } catch(e) {
+    console.error('propagarSaldosDesdeAnterior: error al guardar en el mes actual:', e);
   }
 }
 
