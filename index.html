@@ -7500,6 +7500,7 @@ function crearDesgloseRow(id, monto, desc, pagado) {
         btn.textContent = nuevoEstado ? '✓ Pagado' : 'Pendiente';
       }
     });
+    sincronizarCamposDesdeDesglose(); // Cobrado/Por cobrar se mueven de inmediato
     await guardarCampo(empresaActual, `desglose_${id}_pagado`, nuevoEstado ? 'true' : 'false');
   });
 
@@ -7545,7 +7546,118 @@ function actualizarTotalesDesglose() {
     cont.querySelectorAll('.desglose-monto').forEach(el => { total += parseMXN(el.textContent); });
     totalEl.textContent = formatMXN(total);
   });
+  // Meta del mes / Cobrado / Por cobrar se derivan del Desglose (ver
+  // sincronizarCamposDesdeDesglose) — se refresca cada vez que cambia
+  // un monto, se agrega o se quita un renglón, o se carga el mes.
+  sincronizarCamposDesdeDesglose();
 }
+
+// ── Meta del mes, Cobrado y Por cobrar salen del Desglose ──
+// Desde octubre 2026, en todas las empresas MENOS Warehouse Rentals
+// (NMH Baja Sur, cuyo Cobrado sigue saliendo de los vendedores) y
+// Grupo Idirin (que es solo un resumen):
+//   Meta del mes = total del Desglose (pendientes + pagados)
+//   Cobrado      = suma de los renglones marcados "Pagado"
+//   Por cobrar   = suma de los renglones "Pendiente"
+// Los tres campos dejan de ser editables a mano. Los meses anteriores a
+// octubre 2026 NO se tocan: sus cifras se capturaron a mano y no
+// coinciden con su Desglose, así que recalcularlos cambiaría el
+// historial.
+const DESGLOSE_DERIVA_DESDE = { anio: 2026, mes: 10 };
+const CAMPOS_DERIVADOS_DESGLOSE = [
+  { id: 'metaValor',      campo: 'meta',       tip: 'Se calcula automáticamente: total del Desglose.' },
+  { id: 'cobradoMonto',   campo: 'cobrado',    tip: 'Se calcula automáticamente: suma de lo marcado como Pagado en el Desglose.' },
+  { id: 'porCobrarMonto', campo: 'por_cobrar', tip: 'Se calcula automáticamente: suma de lo Pendiente en el Desglose.' },
+];
+
+function desgloseDerivaCampos() {
+  if (empresaActual === 'warehouse_rentals' || empresaActual === 'grupo_idirin') return false;
+  if (periodoAnio !== DESGLOSE_DERIVA_DESDE.anio) return periodoAnio > DESGLOSE_DERIVA_DESDE.anio;
+  return periodoMes >= DESGLOSE_DERIVA_DESDE.mes;
+}
+
+// Quita (o devuelve) la edición a mano de los 3 campos según empresa y
+// mes. Solo restaura lo que ella misma bloqueó (marca data-bloqueo-
+// desglose), para no pisar el bloqueo propio de Warehouse Rentals ni
+// las reglas por rol/mes de actualizarEditabilidadGlobal().
+function aplicarBloqueoCamposDerivados() {
+  const deriva = desgloseDerivaCampos();
+  let restauro = false;
+  CAMPOS_DERIVADOS_DESGLOSE.forEach(c => {
+    const el = document.getElementById(c.id);
+    if (!el) return;
+    if (deriva) {
+      el.removeAttribute('contenteditable');
+      el.classList.add('campo-derivado');
+      el.title = c.tip;
+      el.setAttribute('data-bloqueo-desglose', '1');
+    } else if (el.hasAttribute('data-bloqueo-desglose')) {
+      el.removeAttribute('data-bloqueo-desglose');
+      el.classList.remove('campo-derivado');
+      el.removeAttribute('title');
+      el.setAttribute('contenteditable', 'true');
+      restauro = true;
+    }
+  });
+  if (restauro) actualizarEditabilidadGlobal(); // vuelve a aplicar rol/mes
+}
+
+function puedeEscribirBalance() {
+  const b = document.body.classList;
+  return !(b.contains('modo-lector') || b.contains('modo-user') || b.contains('modo-editor') || b.contains('modo-vista-acotada'));
+}
+
+function sincronizarCamposDesdeDesglose() {
+  if (!desgloseDerivaCampos()) return;
+  const cont = document.getElementById('desgloseContFlujo');
+  if (!cont) return;
+
+  let total = 0, pagado = 0;
+  cont.querySelectorAll('.desglose-row').forEach(fila => {
+    const montoEl = fila.querySelector('.desglose-monto');
+    const m = montoEl ? parseMXN(montoEl.textContent) : 0;
+    total += m;
+    if (fila.classList.contains('is-pagado')) pagado += m;
+  });
+  const valores = {
+    meta:       formatMXN(total),
+    cobrado:    formatMXN(pagado),
+    por_cobrar: formatMXN(total - pagado),
+  };
+
+  CAMPOS_DERIVADOS_DESGLOSE.forEach(c => {
+    const el = document.getElementById(c.id);
+    if (el) el.textContent = valores[c.campo];
+  });
+  recalcular(); // barra de meta, "Por conseguir", Ventas, etc.
+
+  // Se guarda en Supabase (otras pantallas, como Grupo Idirin, leen
+  // estos campos directo de la base) SOLO si es el mes real en curso,
+  // el rol puede escribir, y el valor cambió — así ver un mes pasado o
+  // futuro nunca escribe nada. Con pausa, para no guardar en cada tecla.
+  const esMesReal = periodoAnio === HOY.getFullYear() && periodoMes === (HOY.getMonth() + 1);
+  if (!esMesReal || !puedeEscribirBalance()) return;
+  const empresa = empresaActual, anio = periodoAnio, mes = periodoMes;
+  clearTimeout(saveTimers['derivados_desglose']);
+  saveTimers['derivados_desglose'] = setTimeout(async () => {
+    if (empresa !== empresaActual || anio !== periodoAnio || mes !== periodoMes) return; // cambió de empresa/mes
+    for (const c of CAMPOS_DERIVADOS_DESGLOSE) {
+      const nuevo = valores[c.campo];
+      const k = `${empresa}|${anio}|${mes}|${c.campo}`;
+      if (derivadosGuardados[k] === nuevo) continue; // ya se guardó este mismo valor
+      // Si el mes se acaba de copiar del anterior (todavía sin guardar),
+      // lo que hay en datosActuales NO es un dato guardado de este mes.
+      const previo = datosActuales.__copiado_de_mes_anterior__ ? undefined : datosActuales[c.campo];
+      const yaEstabaGuardado = previo !== undefined && parseMXN(previo) === parseMXN(nuevo);
+      datosActuales[c.campo] = nuevo;
+      derivadosGuardados[k] = nuevo;
+      if (yaEstabaGuardado) continue;
+      if (previo === undefined && parseMXN(nuevo) === 0) continue; // nada real que guardar
+      await guardarCampo(empresa, c.campo, nuevo);
+    }
+  }, 800);
+}
+const derivadosGuardados = {}; // último valor derivado ya guardado, por empresa|año|mes|campo
 
 // Expande/colapsa solo la copia de la tarjeta donde se clickeó el
 // toggle (Flujo y Ventas se expanden/colapsan de forma independiente,
@@ -8592,6 +8704,9 @@ async function cambiarEmpresa(empresa_id) {
       cobradoMontoEl.removeAttribute('title');
     }
   }
+  // Meta / Cobrado / Por cobrar se derivan del Desglose desde oct. 2026
+  // (excepto WH y Grupo) — ver desgloseDerivaCampos().
+  aplicarBloqueoCamposDerivados();
 
   if (!esUnveil && !esWH && empresa_id !== 'grupo_idirin') {
     document.getElementById('panelBalanceEmpresa').style.display = '';
