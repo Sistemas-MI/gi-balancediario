@@ -7561,9 +7561,10 @@ function actualizarTotalesDesglose() {
 // Warehouse Rentals (NMH Baja Sur) es la excepción en Cobrado, que sigue
 // saliendo de los vendedores (ver recalcular()); ahí:
 //   Por cobrar   = suma de los renglones "Pendiente" del Desglose
-//   Meta del mes = Pendientes del Desglose + Cobrado (el de vendedores)
-//                  — el mismo "pendiente + cobrado" que en las demás
-//                  empresas, solo que aquí lo cobrado sale de los vendedores
+//   Meta del mes = Cobrado (el de vendedores) + total del Desglose
+//                  (pendientes + pagados) — así NO baja al marcar un
+//                  renglón como "Pagado": ni el total del Desglose ni el
+//                  Cobrado de vendedores cambian con ese movimiento
 // Los campos derivados dejan de ser editables a mano. Los meses
 // anteriores a octubre 2026 NO se tocan: sus cifras se capturaron a
 // mano y no coinciden con su Desglose, así que recalcularlos cambiaría
@@ -7574,7 +7575,7 @@ const CAMPOS_DERIVADOS_DESGLOSE = [
   { id: 'cobradoMonto',   campo: 'cobrado',    tip: 'Se calcula automáticamente: suma de lo marcado como Pagado en el Desglose.' },
   { id: 'porCobrarMonto', campo: 'por_cobrar', tip: 'Se calcula automáticamente: suma de lo Pendiente en el Desglose.' },
 ];
-const TIP_META_WH = 'Se calcula automáticamente: Cobrado (vendedores) + Por cobrar (pendientes del Desglose).';
+const TIP_META_WH = 'Se calcula automáticamente: Cobrado (vendedores) + total del Desglose.';
 
 function desgloseDerivaCampos() {
   if (empresaActual === 'grupo_idirin') return false;
@@ -7644,9 +7645,10 @@ function sincronizarCamposDesdeDesglose() {
   const valores = esWHDeriva
     ? {
         // Warehouse Rentals: Cobrado sale de los vendedores (no se toca
-        // aquí); Por cobrar = pendientes; Meta = pendientes + Cobrado
-        // de vendedores (lo cobrado sale de ahí, no de los "Pagado").
-        meta:       formatMXN(calcularTotalVendedoresWH() + pendiente),
+        // aquí); Por cobrar = pendientes; Meta = Cobrado de vendedores +
+        // total del Desglose (pendientes + pagados), así marcar un
+        // renglón como Pagado no la mueve.
+        meta:       formatMXN(calcularTotalVendedoresWH() + total),
         por_cobrar: formatMXN(pendiente),
       }
     : {
@@ -11055,7 +11057,7 @@ function renderWHVendedores(datos) {
           // conseguir", la barra de meta y el reparto entre vendedores —
           // todo lo que depende de lo cobrado en Warehouse Rentals.
           recalcular();
-          // La Meta (= pendientes + Cobrado de vendedores) también
+          // La Meta (= Cobrado de vendedores + total del Desglose) también
           // depende de esta suma — se recalcula y se guarda junto.
           sincronizarCamposDesdeDesglose();
           // "Cobrado" ya no se captura a mano, pero sigue siendo una
