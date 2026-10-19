@@ -7561,7 +7561,9 @@ function actualizarTotalesDesglose() {
 // Warehouse Rentals (NMH Baja Sur) es la excepción en Cobrado, que sigue
 // saliendo de los vendedores (ver recalcular()); ahí:
 //   Por cobrar   = suma de los renglones "Pendiente" del Desglose
-//   Meta del mes = Cobrado (vendedores) + Por cobrar
+//   Meta del mes = Pendientes del Desglose + Cobrado (el de vendedores)
+//                  — el mismo "pendiente + cobrado" que en las demás
+//                  empresas, solo que aquí lo cobrado sale de los vendedores
 // Los campos derivados dejan de ser editables a mano. Los meses
 // anteriores a octubre 2026 NO se tocan: sus cifras se capturaron a
 // mano y no coinciden con su Desglose, así que recalcularlos cambiaría
@@ -7642,7 +7644,8 @@ function sincronizarCamposDesdeDesglose() {
   const valores = esWHDeriva
     ? {
         // Warehouse Rentals: Cobrado sale de los vendedores (no se toca
-        // aquí); Por cobrar = pendientes; Meta = Cobrado + Por cobrar.
+        // aquí); Por cobrar = pendientes; Meta = pendientes + Cobrado
+        // de vendedores (lo cobrado sale de ahí, no de los "Pagado").
         meta:       formatMXN(calcularTotalVendedoresWH() + pendiente),
         por_cobrar: formatMXN(pendiente),
       }
@@ -11052,8 +11055,8 @@ function renderWHVendedores(datos) {
           // conseguir", la barra de meta y el reparto entre vendedores —
           // todo lo que depende de lo cobrado en Warehouse Rentals.
           recalcular();
-          // Meta del mes (= Cobrado + Por cobrar) también depende de la
-          // suma de vendedores — se recalcula y se guarda junto.
+          // La Meta (= pendientes + Cobrado de vendedores) también
+          // depende de esta suma — se recalcula y se guarda junto.
           sincronizarCamposDesdeDesglose();
           // "Cobrado" ya no se captura a mano, pero sigue siendo una
           // columna real en Supabase (otras pantallas, como la vista
