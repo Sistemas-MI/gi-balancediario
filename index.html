@@ -5315,7 +5315,7 @@
         <div class="wh-presupuesto-monto" id="whPresupuestoMonto" title="Se captura en Balance Mensual · Presupuesto del mes">$0</div>
         <span class="wh-presupuesto-monto-pct" id="whPresupuestoMontoPct" title="Lo que ya cobraron entre todos los vendedores, contra el presupuesto">0%</span>
       </div>
-      <p class="wh-presupuesto-sub">÷ 4 vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
+      <p class="wh-presupuesto-sub">÷ <span id="whPresupuestoNumVendedores">4</span> vendedores = <span id="whPresupuestoPorVendedor">$0</span> c/u</p>
       <p class="wh-presupuesto-nota">Nota: el % es lo que cada quien ya cobró contra lo que le tocaría cobrar según el presupuesto.</p>
       <div class="wh-presupuesto-lista" id="whPresupuestoLista">
         <!-- Filas generadas por renderWHPresupuesto() -->
@@ -5338,7 +5338,7 @@
         <span class="wh-resumen-lbl">Falta para la meta</span>
         <span class="wh-resumen-val wh-resumen-val--falta" id="whPorConseguirTotal">$0</span>
       </div>
-      <p class="wh-resumen-nota">Repartido en partes iguales entre los vendedores.</p>
+      <p class="wh-resumen-nota">Cada quien: su parte de la meta (÷ vendedores) menos lo que ya cobró. El total es lo que le falta a la empresa.</p>
     </div>
 
     <div class="wh-vendedores-grid wh-vendedores-grid--falta" id="whPorConseguirGrid">
@@ -9755,7 +9755,10 @@ const WH_VENDEDORES = [
   { key: 'regina_g',    nombre: 'Regina G',    iniciales: 'RG', color: 'color-1' },
   { key: 'regina_m',    nombre: 'Regina M',    iniciales: 'RM', color: 'color-2' },
   { key: 'jaqueline_v', nombre: 'Jaqueline V', iniciales: 'JV', color: 'color-3' },
-  { key: 'fernando_c',  nombre: 'Fernando C',  iniciales: 'FC', color: 'color-4' },
+  // Fernando C deja de laborar a partir de octubre 2026: desde ese mes ya
+  // no cuenta como vendedor activo (ver vendedorEsHistorico). Sus meses
+  // anteriores (marzo–julio con montos) quedan exactamente como estaban.
+  { key: 'fernando_c',  nombre: 'Fernando C',  iniciales: 'FC', color: 'color-4', baja: { anio: 2026, mes: 10 } },
   // Histórico (ya no venden, solo aparecen en meses pasados con monto
   // propio — Ene/Feb/Mar/Abr 2026 — y siempre de solo lectura, nunca
   // editables aunque el mes esté "abierto")
@@ -9768,6 +9771,16 @@ const WH_VENDEDORES = [
   // solo lectura, y solo aparece en el mes donde tiene monto real.
   { key: 'evento_atp',  nombre: 'Evento ATP', iniciales: 'ATP', color: 'color-sv', historico: true },
 ];
+// ¿Este vendedor cuenta como histórico en el mes que se está viendo?
+// Sí si siempre lo fue (historico: true), o si ya llegó su fecha de baja
+// (baja: { anio, mes }, ej. Fernando C desde octubre 2026). Antes de esa
+// fecha sigue siendo un vendedor activo normal.
+function vendedorEsHistorico(v) {
+  if (v.historico) return true;
+  if (!v.baja) return false;
+  return periodoAnio > v.baja.anio || (periodoAnio === v.baja.anio && periodoMes >= v.baja.mes);
+}
+
 
 // Suma de "Cobrado por vendedor" (Regina G + Regina M + Jaqueline V +
 // Fernando C + históricos que apliquen ese mes). Es la única fuente de
@@ -10994,7 +11007,7 @@ function renderWHVendedores(datos) {
     //  - Mes PASADO: cualquiera (activo o histórico) sin monto registrado
     //    se oculta — es un mes cerrado, no hace falta una tarjeta para
     //    "capturar" nada ahí.
-    const debeOcultarse = esMesPasado ? (num === 0) : (v.historico && num === 0);
+    const debeOcultarse = esMesPasado ? (num === 0) : (vendedorEsHistorico(v) && num === 0);
     if (debeOcultarse) return;
 
     const pct = total > 0 ? Math.min(Math.round(num / total * 100), 100) : 0;
@@ -11008,7 +11021,7 @@ function renderWHVendedores(datos) {
     // se está en Balance de Ventas (el apartado "Vendedores" de NMH
     // Baja Sur es de solo lectura ahí para todos, sin excepción — se
     // edita únicamente desde Balance de Flujo).
-    const soloLectura = v.historico || esMesPasado || modoVentas;
+    const soloLectura = vendedorEsHistorico(v) || esMesPasado || modoVentas;
     const montoHTML = soloLectura
       ? `<div class="wh-v-monto" style="cursor:default">${escapeHTML(val)}</div>`
       : `<div class="wh-v-monto" contenteditable="true" data-field="${campo}" data-wh-vend="${v.key}">${escapeHTML(val)}</div>`;
@@ -11017,7 +11030,7 @@ function renderWHVendedores(datos) {
       <div class="wh-v-iniciales ${v.color}">${v.iniciales}</div>
       <div class="wh-v-info">
         <div class="wh-v-nombre">${escapeHTML(v.nombre)}</div>
-        <div class="wh-v-label">${v.historico ? 'Histórico' : 'Vendedor'}</div>
+        <div class="wh-v-label">${vendedorEsHistorico(v) ? 'Histórico' : `Vendedor<span class="wh-v-cuota"> · <span class="wh-v-cuota-lbl">Su meta</span> <span class="wh-v-cuota-val">$0.00</span></span>`}</div>
       </div>
       <div class="wh-v-monto-wrap">
         ${montoHTML}
@@ -11058,7 +11071,7 @@ function renderWHVendedores(datos) {
           // conseguir", la barra de meta y el reparto entre vendedores —
           // todo lo que depende de lo cobrado en Warehouse Rentals.
           recalcular();
-          // La Meta (= Cobrado de vendedores + total del Desglose) también
+          // La Meta (= Cobrado de vendedores + Por cobrar) también
           // depende de esta suma — se recalcula y se guarda junto.
           sincronizarCamposDesdeDesglose();
           // "Cobrado" ya no se captura a mano, pero sigue siendo una
@@ -11093,6 +11106,27 @@ function renderWHVendedores(datos) {
   // El total que se muestra arriba SÍ es la suma de todos los montos
   // (activos + históricos que apliquen ese mes).
   actualizarResumenWHVendedores(total);
+  actualizarCuotasWHVendedores();
+}
+
+// Llena la etiqueta "Su meta" de cada vendedor activo: su parte de la
+// meta del mes = Meta ÷ número de vendedores activos (la misma cuenta
+// que usa "Faltante por vendedores"; en Balance de Ventas, el Objetivo
+// de venta). Se llama al dibujar las filas y cada vez que algo se
+// recalcula, porque la Meta de NMH se mueve al capturar un vendedor.
+function actualizarCuotasWHVendedores() {
+  const grid = document.getElementById('whVendedoresGrid');
+  if (!grid) return;
+  const activos = WH_VENDEDORES.filter(v => !vendedorEsHistorico(v));
+  const metaEl = document.getElementById(modoVentas ? 'ventaObjetivoValor' : 'metaValor');
+  const meta = metaEl ? parseMXN(metaEl.textContent) : 0;
+  const cuota = activos.length > 0 ? meta / activos.length : 0;
+  const tip = `${modoVentas ? 'Objetivo de venta' : 'Meta del mes'} ${formatMXN(meta)} ÷ ${activos.length} vendedores`;
+  grid.querySelectorAll('.wh-v-cuota').forEach(el => {
+    const val = el.querySelector('.wh-v-cuota-val');
+    if (val) val.textContent = formatMXN(cuota);
+    el.title = tip;
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -11122,7 +11156,7 @@ function renderWHPorConseguir() {
   // (Regina G, Regina M, Jaqueline V, Fernando C). Juan, Nicole y "Sin
   // vendedor" son histórico de meses ya cerrados — no tiene sentido
   // repartirles meta futura, así que se excluyen de este cálculo.
-  const activos = WH_VENDEDORES.filter(v => !v.historico);
+  const activos = WH_VENDEDORES.filter(v => !vendedorEsHistorico(v));
 
   // CORRECCIÓN: el total de esta tarjeta ANTES se leía de "Por
   // conseguir" / "Diferencia" (Meta − Cobrado − Por cobrar, a nivel
@@ -11151,37 +11185,32 @@ function renderWHPorConseguir() {
     return parseMXN(raw || '$0');
   };
 
-  // CORRECCIÓN (bug real, validado): antes cada vendedor se comparaba
-  // SOLO contra su cuarta parte de la meta, topando su faltante en $0
-  // si la superaba — pero ese excedente nunca se usaba para compensar
-  // a los demás. Si alguien vendía muy por encima de su cuota (ej.
-  // Jaqueline con $1,748,157.83 contra una cuota de $663,871.36) y
-  // otro se quedaba muy corto, la SUMA de los 4 faltantes por separado
-  // terminaba siendo varias veces más grande que lo que en realidad le
-  // falta a la empresa completa para la meta — ej. mostraba
-  // $1,383,680.24 de faltante cuando la empresa ya iba al 89% de su
-  // meta y en realidad solo faltaban $299,393.77.
-  //
-  // Ahora el total SIEMPRE es el faltante real de la empresa (Meta −
-  // lo que ya cobraron entre todos, nunca negativo) — y ese total real
-  // se reparte entre los vendedores que van abajo de su cuota,
-  // proporcional a qué tan atrás va cada quien (así la suma de las 4
-  // filas coincide siempre, en pesos exactos, con el total de arriba;
-  // nadie que ya superó su cuota resta ni aporta a los demás, pero
-  // tampoco vuelve a inflar el total).
-  const cobradoTotalActivos = activos.reduce((s, v) => s + cobradoDe(v.key), 0);
+  // Cómo se calcula (validado con datos reales):
+  //  - TOTAL ("Falta para la meta") = Meta − Total cobrado de la empresa
+  //    (nunca negativo). Es el faltante real. Antes se obtenía SUMANDO
+  //    los faltantes de cada fila, y eso lo inflaba: si alguien rebasaba
+  //    su parte (ej. $1,748,157.83 contra una parte de $663,871.36), su
+  //    excedente no compensaba a los demás y el total salía varias veces
+  //    más grande que lo que en realidad faltaba.
+  //  - CADA FILA = la parte de la meta de ese vendedor (Meta ÷ vendedores
+  //    activos) menos lo que YA cobró, mínimo $0. Es la cuenta directa
+  //    que se espera ver por vendedor. Por eso las filas pueden sumar más
+  //    que el total cuando alguien ya superó su parte: es normal, ese
+  //    excedente ya cubrió parte de la meta de la empresa.
+  // El faltante se mide contra el MISMO "Total cobrado" que se ve arriba
+  // en esta pestaña (suma de todos los vendedores con monto ese mes, no
+  // solo de los activos) — así "Falta para la meta" = Meta − Total
+  // cobrado, siempre, y no se descuadra si un vendedor ya dado de baja
+  // tuviera algún monto.
+  const cobradoTotalActivos = calcularTotalVendedoresWH();
   const faltanteReal = Math.max(0, metaTotal - cobradoTotalActivos);
-  const crudoDe = activos.map(v => ({ v, crudo: Math.max(0, metaIndividual - cobradoDe(v.key)) }));
-  const sumaCruda = crudoDe.reduce((s, x) => s + x.crudo, 0);
 
   grid.innerHTML = '';
-  let totalFalta = 0;
-  crudoDe.forEach(({ v, crudo }) => {
+  activos.forEach(v => {
     const cobrado = cobradoDe(v.key);
-    const falta = sumaCruda > 0 ? faltanteReal * (crudo / sumaCruda) : 0;
-    totalFalta += falta;
-    // La barra sigue mostrando el AVANCE real de cada quien contra su
-    // propia cuota — eso no cambia, solo el monto en pesos de "falta".
+    const falta = Math.max(0, metaIndividual - cobrado); // su parte − lo que ya cobró
+    // La barra muestra el AVANCE real de cada quien contra su propia
+    // parte de la meta.
     const pct = metaIndividual > 0 ? Math.min(Math.round(cobrado / metaIndividual * 100), 100) : 0;
 
     const row = document.createElement('div');
@@ -11208,10 +11237,8 @@ function renderWHPorConseguir() {
     });
   });
 
-  // El total ahora es SIEMPRE el faltante real de la empresa (validado
-  // arriba) — y por construcción coincide, en pesos exactos, con la
-  // suma de las 4 filas (el reparto proporcional garantiza que sumen
-  // igual), así que nunca se puede inflar ni contradecir a las filas.
+  // El total es SIEMPRE el faltante real de la empresa (Meta − Total
+  // cobrado), no la suma de las filas.
   if (totalEl) totalEl.textContent = formatMXN(faltanteReal);
 }
 
@@ -11244,7 +11271,7 @@ function renderWHPresupuesto() {
   card.style.display = '';
   if (faltaCard) faltaCard.style.display = '';
 
-  const activos = WH_VENDEDORES.filter(v => !v.historico);
+  const activos = WH_VENDEDORES.filter(v => !vendedorEsHistorico(v));
 
   // Se lee directo del campo en pantalla (igual que "meta" en
   // renderWHPorConseguir), NO de datosActuales — ese objeto es una foto
@@ -11257,6 +11284,11 @@ function renderWHPresupuesto() {
 
   const presupuestoMontoEl = document.getElementById('whPresupuestoMonto');
   if (presupuestoMontoEl) presupuestoMontoEl.textContent = formatMXN(presupuestoTotal);
+
+  // El "÷ N vendedores" refleja cuántos hay activos este mes (desde
+  // octubre 2026 son 3, sin Fernando C) — antes decía "4" fijo.
+  const numVendedoresEl = document.getElementById('whPresupuestoNumVendedores');
+  if (numVendedoresEl) numVendedoresEl.textContent = activos.length;
 
   const porVendedorEl = document.getElementById('whPresupuestoPorVendedor');
   if (porVendedorEl) porVendedorEl.textContent = formatMXN(porVendedor);
@@ -11398,6 +11430,7 @@ function actualizarBarrasWHVendedores() {
   });
   // El total incluye activos + históricos visibles ese mes.
   actualizarResumenWHVendedores(total);
+  actualizarCuotasWHVendedores();
 }
 
 // Actualiza la tarjeta de resumen (total + barra) que está arriba del
