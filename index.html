@@ -2729,6 +2729,24 @@
     border-color: #2E7D53;
     color: #fff;
   }
+  /* NMH: al marcar Pagado aparece este selector ("¿Quién lo cobró?") en el
+     lugar del botón, con el mismo estilo del botón. */
+  .desglose-vend-sel {
+    flex-shrink: 0;
+    align-self: center;
+    border: 1px solid rgba(122,74,92,.35);
+    background: transparent;
+    color: var(--suave);
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    padding: 4px 8px;
+    border-radius: 20px;
+    cursor: pointer;
+    max-width: 160px;
+  }
+  .desglose-vend-sel:focus { outline: none; border-color: #2E7D53; color: #2E7D53; }
   .desglose-remove {
     position: absolute;
     top: 11px;
@@ -7463,6 +7481,16 @@ function crearDesgloseRow(id, monto, desc, pagado) {
     const num = parseMXN(montoEl.textContent);
     montoEl.textContent = formatMXN(num);
     sincronizarDesgloseCampo(id, 'monto', montoEl.textContent, montoEl);
+    // NMH: si este renglón ya se sumó al Cobrado de un vendedor y se
+    // corrige su monto, el vendedor se ajusta por la diferencia.
+    const vendAbono = datosActuales[`desglose_${id}_vend`];
+    const abonoPrev = parseMXN(datosActuales[`desglose_${id}_abono`] || '');
+    if (empresaActual === 'warehouse_rentals' && !modoVentas && div.classList.contains('is-pagado')
+        && vendAbono && abonoPrev > 0 && Math.abs(num - abonoPrev) > 0.004) {
+      datosActuales[`desglose_${id}_abono`] = formatMXN(num);
+      ajustarCobradoVendedorWH(vendAbono, num - abonoPrev);
+      guardarCampo(empresaActual, `desglose_${id}_abono`, formatMXN(num));
+    }
     actualizarTotalesDesglose();
   });
 
@@ -7490,22 +7518,128 @@ function crearDesgloseRow(id, monto, desc, pagado) {
     if (esMesPasado) return;
 
     const nuevoEstado = !div.classList.contains('is-pagado');
-    // Refleja el nuevo estado en TODAS las copias de esta fila (Flujo
-    // y Ventas), no solo en la que se clickeó.
-    document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"]`).forEach(fila => {
-      fila.classList.toggle('is-pagado', nuevoEstado);
-      const btn = fila.querySelector('.desglose-pagado-btn');
-      if (btn) {
-        btn.classList.toggle('is-pagado', nuevoEstado);
-        btn.textContent = nuevoEstado ? '✓ Pagado' : 'Pendiente';
+
+    // NMH (Warehouse Rentals), en Balance de Flujo: el Cobrado sale de los
+    // vendedores, así que al marcar Pagado se elige quién lo cobró y ese
+    // monto se SUMA a su Cobrado (un solo paso, sin doble captura). Al
+    // regresarlo a Pendiente, se resta. En Ventas los vendedores son de
+    // solo lectura, así que ahí solo se marca el estado.
+    if (empresaActual === 'warehouse_rentals' && !modoVentas) {
+      const montoNum = parseMXN(montoEl.textContent);
+      if (nuevoEstado) {
+        const eleccion = await elegirVendedorCobro(pagadoBtn);
+        if (!eleccion) return; // canceló: no se cambia nada
+        const conAbono = eleccion !== '__ya__'; // "__ya__" = ya lo capturé a mano en el vendedor
+        if (conAbono) {
+          datosActuales[`desglose_${id}_vend`]  = eleccion;
+          datosActuales[`desglose_${id}_abono`] = formatMXN(montoNum);
+        }
+        aplicarEstadoPagadoDesglose(id, true);
+        // Primero se actualiza el vendedor (síncrono hasta su primer await)
+        // y luego se recalcula la Meta con ese Cobrado ya actualizado.
+        const pVend = conAbono ? ajustarCobradoVendedorWH(eleccion, montoNum) : null;
+        sincronizarCamposDesdeDesglose();
+        await guardarCampo(empresaActual, `desglose_${id}_pagado`, 'true');
+        if (conAbono) {
+          await pVend;
+          await guardarCampo(empresaActual, `desglose_${id}_vend`, eleccion);
+          await guardarCampo(empresaActual, `desglose_${id}_abono`, formatMXN(montoNum));
+        }
+        return;
       }
-    });
+      // De Pagado a Pendiente: si se había sumado a un vendedor, se resta.
+      const vend  = datosActuales[`desglose_${id}_vend`];
+      const abono = parseMXN(datosActuales[`desglose_${id}_abono`] || '');
+      aplicarEstadoPagadoDesglose(id, false);
+      const conAbono = !!vend && abono > 0;
+      const pVend = conAbono ? ajustarCobradoVendedorWH(vend, -abono) : null;
+      delete datosActuales[`desglose_${id}_vend`];
+      delete datosActuales[`desglose_${id}_abono`];
+      sincronizarCamposDesdeDesglose();
+      await guardarCampo(empresaActual, `desglose_${id}_pagado`, 'false');
+      if (vend) {
+        if (pVend) await pVend;
+        await guardarCampo(empresaActual, `desglose_${id}_vend`, '');
+        await guardarCampo(empresaActual, `desglose_${id}_abono`, '');
+      }
+      return;
+    }
+
+    aplicarEstadoPagadoDesglose(id, nuevoEstado);
     sincronizarCamposDesdeDesglose(); // Cobrado/Por cobrar se mueven de inmediato
     await guardarCampo(empresaActual, `desglose_${id}_pagado`, nuevoEstado ? 'true' : 'false');
   });
 
   div.querySelector('.desglose-remove').addEventListener('click', () => quitarDesgloseRow(id));
   return div;
+}
+
+// Marca/desmarca "Pagado" en TODAS las copias de una fila (Flujo y Ventas).
+function aplicarEstadoPagadoDesglose(id, estado) {
+  document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"]`).forEach(fila => {
+    fila.classList.toggle('is-pagado', estado);
+    const btn = fila.querySelector('.desglose-pagado-btn');
+    if (btn) {
+      btn.classList.toggle('is-pagado', estado);
+      btn.textContent = estado ? '✓ Pagado' : 'Pendiente';
+    }
+  });
+}
+
+// NMH: pregunta quién cobró el pago. Muestra un selector en el lugar del
+// botón; devuelve la clave del vendedor, "__ya__" (ya lo capturé a mano
+// en el vendedor, no sumar nada) o null si se cancela (clic fuera/Esc).
+function elegirVendedorCobro(btn) {
+  return new Promise(resolve => {
+    const sel = document.createElement('select');
+    sel.className = 'desglose-vend-sel';
+    sel.title = '¿Quién lo cobró? Se suma a su Cobrado';
+    const activos = WH_VENDEDORES.filter(v => !vendedorEsHistorico(v));
+    sel.innerHTML = '<option value="" selected disabled>¿Quién lo cobró?</option>'
+      + activos.map(v => `<option value="${v.key}">${escapeHTML(v.nombre)}</option>`).join('')
+      + '<option value="__ya__">Ya lo capturé en el vendedor</option>';
+    const t0 = Date.now();
+    let cerrado = false;
+    const cerrar = (valor) => {
+      if (cerrado) return;
+      cerrado = true;
+      sel.remove();
+      btn.style.display = '';
+      resolve(valor);
+    };
+    sel.addEventListener('change', () => cerrar(sel.value || null));
+    sel.addEventListener('blur', () => {
+      // Algunos navegadores sueltan el foco un instante al abrir la lista.
+      if (Date.now() - t0 < 250) { sel.focus(); return; }
+      cerrar(null);
+    });
+    sel.addEventListener('keydown', e => { if (e.key === 'Escape') cerrar(null); });
+    btn.style.display = 'none';
+    btn.after(sel);
+    sel.focus();
+    try { if (sel.showPicker) sel.showPicker(); } catch (e) { /* sin lista automática: se abre con un clic */ }
+  });
+}
+
+// NMH: suma (o resta, con delta negativo) un monto al Cobrado de un
+// vendedor — el mismo campo (wh_vend_<vendedor>) que se captura a mano,
+// así todo lo demás (Cobrado total, Meta, Faltante, Acumulado, Grupo
+// Idirin) lo toma sin cambios. Nunca baja de $0.
+async function ajustarCobradoVendedorWH(key, delta) {
+  const campo = 'wh_vend_' + key;
+  const crudo = datosActuales[campo];
+  const actual = parseMXN(crudo !== undefined && crudo !== '' ? crudo : (DEFAULTS[campo] || '$0'));
+  const nuevo = formatMXN(Math.max(0, actual + delta));
+  datosActuales[campo] = nuevo;
+  const el = document.querySelector(`.wh-v-monto[data-wh-vend="${key}"]`);
+  if (el) el.textContent = nuevo;
+  recalcular(); // Cobrado total, barras, Por conseguir...
+  await guardarCampo(empresaActual, campo, nuevo);
+  // Igual que al capturar un vendedor a mano: "Cobrado" también se guarda
+  // en la base (Grupo Idirin lo lee de ahí).
+  const cobradoEl = document.getElementById('cobradoMonto');
+  if (cobradoEl) await guardarCampo(empresaActual, 'cobrado', cobradoEl.textContent);
+  sincronizarCamposDesdeDesglose();
 }
 
 // Refleja, en la OTRA copia de esta misma fila (Flujo↔Ventas), el
@@ -7759,10 +7893,16 @@ async function quitarDesgloseRow(id) {
     if (vacio) vacio.style.display = desgloseIds.length ? 'none' : '';
   });
   actualizarTotalesDesglose();
+  // Se borra SOLO de este mes (año + mes): los mismos renglones se arrastran
+  // a meses siguientes con el mismo id, y sin ese filtro se borraban
+  // también de los meses anteriores. Lo que ya se sumó al Cobrado de un
+  // vendedor se queda (es dinero cobrado); solo se limpian las marcas.
+  delete datosActuales[`desglose_${id}_vend`];
+  delete datosActuales[`desglose_${id}_abono`];
   try {
-    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_monto')}`);
-    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_desc')}`);
-    await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&campo=eq.${encodeURIComponent('desglose_'+id+'_pagado')}`);
+    for (const sufijo of ['monto', 'desc', 'pagado', 'vend', 'abono']) {
+      await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&anio=eq.${periodoAnio}&mes=eq.${periodoMes}&campo=eq.${encodeURIComponent('desglose_'+id+'_'+sufijo)}`);
+    }
   } catch(e) { console.error('quitarDesgloseRow cleanup:', e); }
 }
 
