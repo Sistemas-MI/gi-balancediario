@@ -1776,6 +1776,20 @@
   }
   .modal-btn-confirm:hover { opacity: .85; }
   .modal-btn-confirm:disabled { opacity: .4; cursor: not-allowed; }
+  /* Confirmación de acciones que borran: mismo cuadro del sistema, con el
+     botón de confirmar en rojo (el rojo de alerta de la paleta) y un
+     resumen de lo que se va a borrar. */
+  .modal-btn-peligro { background: #C0392B; }
+  .modal-btn-cancel:focus-visible, .modal-btn-confirm:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
+  .confirm-resumen {
+    margin: 0 0 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--linea);
+    border-bottom: 1px solid var(--linea);
+  }
+  .confirm-resumen-desc { font-size: 12px; font-weight: 500; color: var(--texto); word-break: break-word; }
+  .confirm-resumen-monto { font-family: 'EB Garamond', serif; font-size: 22px; font-weight: 500; color: var(--cafe); margin-top: 2px; }
+  .confirm-resumen-estado { font-family: 'Inter', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--suave); margin-left: 8px; }
 
   /* ══════════════════════════════════════════
      FIN MÓDULO HISTÓRICO
@@ -7692,10 +7706,101 @@ function crearDesgloseRow(id, monto, desc, pagado) {
     if (nuevoEstado) espejoDesgloseMesSiguiente(id, 'quitar'); // en la ventana: ya no es pendiente en el mes siguiente
   });
 
-  div.querySelector('.desglose-remove').addEventListener('click', () => quitarDesgloseRow(id));
+  div.querySelector('.desglose-remove').addEventListener('click', async () => {
+    if (!mesDesgloseEditable()) return;               // mes cerrado: nada que preguntar
+    const confirmado = await confirmarQuitarDesglose(id, div);
+    if (confirmado) await quitarDesgloseRow(id);      // solo si confirman
+  });
   return div;
 }
 
+
+
+// ── Cuadro de confirmación reutilizable (mismo estilo de modal del sistema) ──
+// Devuelve una promesa: true si confirman, false si cancelan (botón Cancelar,
+// Esc o clic fuera del cuadro). El foco arranca en "Cancelar" para que un
+// Enter distraído nunca confirme, y al cerrar regresa a donde estaba.
+// Solo puede haber un cuadro abierto a la vez.
+function confirmarAccion({ titulo, resumenHTML = '', texto, textoConfirmar = 'Confirmar', textoCancelar = 'Cancelar', peligro = false }) {
+  return new Promise(resolve => {
+    if (document.getElementById('confirmarAccionOverlay')) { resolve(false); return; }
+    const foco = document.activeElement;
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.id = 'confirmarAccionOverlay';
+    ov.innerHTML = `
+      <div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="confirmarAccionTitulo" aria-describedby="confirmarAccionTexto">
+        <div class="modal-titulo" id="confirmarAccionTitulo">${escapeHTML(titulo)}</div>
+        ${resumenHTML}
+        <div class="modal-desc" id="confirmarAccionTexto">${escapeHTML(texto)}</div>
+        <div class="modal-btns">
+          <button class="modal-btn-cancel" type="button">${escapeHTML(textoCancelar)}</button>
+          <button class="modal-btn-confirm${peligro ? ' modal-btn-peligro' : ''}" type="button">${escapeHTML(textoConfirmar)}</button>
+        </div>
+      </div>`;
+    const btnCancelar  = ov.querySelector('.modal-btn-cancel');
+    const btnConfirmar = ov.querySelector('.modal-btn-confirm');
+    const cerrar = (resultado) => {
+      document.removeEventListener('keydown', teclas, true);
+      ov.remove();
+      if (foco && typeof foco.focus === 'function' && document.contains(foco)) foco.focus();
+      resolve(resultado);
+    };
+    const teclas = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(false); return; }
+      if (e.key === 'Tab') { // el foco se queda dentro del cuadro
+        e.preventDefault();
+        (document.activeElement === btnCancelar ? btnConfirmar : btnCancelar).focus();
+      }
+    };
+    btnCancelar.addEventListener('click', () => cerrar(false));
+    btnConfirmar.addEventListener('click', () => cerrar(true));
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) cerrar(false); });
+    document.addEventListener('keydown', teclas, true);
+    document.body.appendChild(ov);
+    btnCancelar.focus();
+  });
+}
+
+// Pregunta antes de quitar un renglón del Desglose: muestra qué se va a
+// borrar y qué le pasa a Cobrado / Meta / Por cobrar en esa empresa.
+function confirmarQuitarDesglose(id, fila) {
+  const desc   = (fila.querySelector('.desglose-desc')?.textContent || '').trim() || 'Renglón sin descripción';
+  const monto  = parseMXN(fila.querySelector('.desglose-monto')?.textContent || '');
+  const pagado = fila.classList.contains('is-pagado');
+  const montoTxt = formatMXN(monto);
+  const esNMH = empresaActual === 'warehouse_rentals';
+
+  let efecto;
+  if (!pagado) {
+    efecto = `Dejará de contar en Por cobrar y en la Meta del mes por ${montoTxt}.`;
+  } else if (esNMH) {
+    const vend = datosActuales[`desglose_${id}_vend`];
+    const v = vend ? WH_VENDEDORES.find(x => x.key === vend) : null;
+    efecto = v
+      ? `Lo que ya se sumó al Cobrado de ${v.nombre} se queda: solo se quita este renglón.`
+      : 'Solo se quita este renglón: no cambia el Cobrado de los vendedores.';
+  } else {
+    efecto = `Dejará de contar en Cobrado y en la Meta del mes por ${montoTxt}.`;
+  }
+  // Mes anterior dentro de su ventana: un pendiente ya se copió al mes en curso.
+  if (!pagado && esMesAnteriorAbierto(periodoAnio, periodoMes)) {
+    efecto += ` Si ya se copió a ${MESES_NOMBRES[HOY.getMonth()].toLowerCase()}, también se quita de ahí.`;
+  }
+
+  const resumenHTML = `
+    <div class="confirm-resumen">
+      <div class="confirm-resumen-desc">${escapeHTML(desc)}</div>
+      <div class="confirm-resumen-monto">${escapeHTML(montoTxt)}<span class="confirm-resumen-estado">${pagado ? 'Pagado' : 'Pendiente'}</span></div>
+    </div>`;
+  return confirmarAccion({
+    titulo: '¿Quitar este renglón?',
+    resumenHTML,
+    texto: `${efecto} No se puede deshacer.`,
+    textoConfirmar: 'Sí, quitar',
+    peligro: true,
+  });
+}
 
 // ── Ventana de cierre: que el mes siguiente siga al mes anterior ──
 // Al abrir el mes nuevo, los pendientes del mes anterior se copian
