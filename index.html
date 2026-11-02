@@ -2783,6 +2783,26 @@
   body.modo-lector    .desglose-pagado-btn,
   body.modo-user      .desglose-pagado-btn { pointer-events: none !important; cursor: default !important; }
 
+  /* ── Ventana de cierre: primeros 5 días del mes siguiente ──
+     El mes anterior sigue en modo-historico (todo cerrado) EXCEPTO el
+     Desglose y, en NMH, el Cobrado por vendedor, que siguen capturables.
+     Cada regla exige un rol que ya pueda editar (nunca lector, user,
+     editor, vista acotada ni patricio) y que el JS haya dejado el campo
+     en contenteditable="true" — así no se abre nada a quien no debe. */
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio) .desglose-row [contenteditable="true"],
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio):not(.modo-ventas) .wh-v-monto[contenteditable="true"] {
+    pointer-events: auto !important;
+    cursor: text !important;
+  }
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio) .desglose-row [contenteditable="true"]:focus,
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio):not(.modo-ventas) .wh-v-monto[contenteditable="true"]:focus {
+    background: rgba(92,46,26,.05) !important;
+    border-radius: 3px;
+  }
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio) .desglose-card .btn-add-circular,
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio) .desglose-remove { display: flex !important; }
+  body.modo-historico.ventana-mes-anterior:not(.modo-lector):not(.modo-user):not(.modo-editor):not(.modo-vista-acotada):not(.modo-patricio) .desglose-pagado-btn { pointer-events: auto !important; cursor: pointer !important; }
+
   /* ── Versión de solo lectura: dentro de la tarjeta de CADA empresa en
      el dashboard de Grupo Idirin. Mismo lenguaje visual y mismo acento
      de color que la tarjeta de la empresa, pero sin botones de editar
@@ -6081,6 +6101,12 @@ function actualizarEditabilidadGlobal() {
   // campos del balance usa "debeBloquear" exactamente igual que antes.
   const debeBloquearNotas = esLector || esUser || esEditor || esVistaAcotada;
 
+  // Desglose (y, en NMH, Cobrado por vendedor): igual que "debeBloquear",
+  // pero el mes anterior sigue abierto durante su ventana de 5 días.
+  // Fuera de esa ventana el resultado es idéntico a debeBloquear.
+  const mesCerradoParaDesglose = esMesPasado && !esMesAnteriorAbierto(periodoAnio, periodoMes);
+  const debeBloquearDesglose = mesCerradoParaDesglose || esLector || esUser || esEditor || esVistaAcotada;
+
   // Saldos (campo empieza con "saldo"): excepción explícita — el rol
   // "especial" sí puede dar de alta/editar/borrar cuentas en el tab
   // Saldos (Unveil, NMH Baja Sur y Warehouse Rentals). El resto de
@@ -6102,6 +6128,7 @@ function actualizarEditabilidadGlobal() {
       bloquear = true;
     } else if (el.hasAttribute('data-rich')) bloquear = debeBloquearNotas;
     else if (campo.indexOf('saldo') === 0) bloquear = debeBloquearSaldos;
+    else if (campo.indexOf('desglose_') === 0 || campo.indexOf('wh_vend_') === 0) bloquear = debeBloquearDesglose;
     else bloquear = debeBloquear;
     el.setAttribute('contenteditable', bloquear ? 'false' : 'true');
   });
@@ -6249,6 +6276,7 @@ async function cargarEmpresa(empresa_id) {
 // arrastrado antes, o el usuario ya lo tiene ahí por su cuenta), se
 // deja tal cual — no se pisa su monto/descripción/estado actuales.
 async function propagarDesglosePendientes(empresa_id, mapaActual) {
+  if (!mesPermiteEscrituraAuto()) return; // ver un mes cerrado o futuro no escribe nada
   const mesPrev  = periodoMes === 1 ? 12 : periodoMes - 1;
   const anioPrev = periodoMes === 1 ? periodoAnio - 1 : periodoAnio;
 
@@ -6322,6 +6350,7 @@ async function propagarDesglosePendientes(empresa_id, mapaActual) {
 // se guarda con anio/mes del periodo ACTUAL).
 async function propagarSaldosDesdeAnterior(empresa_id, mapaActual) {
   if (mapaActual['saldos_ids']) return; // el mes actual ya tiene su propia tabla de Saldos
+  if (!mesPermiteEscrituraAuto()) return; // ver un mes cerrado o futuro no escribe nada
 
   const mesPrev  = periodoMes === 1 ? 12 : periodoMes - 1;
   const anioPrev = periodoMes === 1 ? periodoAnio - 1 : periodoAnio;
@@ -7463,18 +7492,16 @@ function crearDesgloseRow(id, monto, desc, pagado) {
   });
 
   montoEl.addEventListener('input', () => {
-    // BLOQUEO ESTRUCTURAL para meses pasados — mismo criterio que
-    // Imprevistos/Traspasos.
-    const anioHoy = HOY.getFullYear();
-    const mesHoy  = HOY.getMonth() + 1;
-    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-    if (esMesPasado) return;
+    // BLOQUEO ESTRUCTURAL para meses cerrados — el mes anterior sigue
+    // abierto solo durante su ventana de 5 días (ver mesDesgloseEditable).
+    if (!mesDesgloseEditable()) return;
 
     sincronizarDesgloseCampo(id, 'monto', montoEl.textContent, montoEl);
     actualizarTotalesDesglose();
     clearTimeout(saveTimers['desglose_' + id + '_monto']);
     saveTimers['desglose_' + id + '_monto'] = setTimeout(async () => {
       await guardarCampo(empresaActual, `desglose_${id}_monto`, montoEl.textContent.trim());
+      espejoDesgloseMesSiguiente(id, 'monto', montoEl.textContent.trim());
     }, 800);
   });
   montoEl.addEventListener('blur', () => {
@@ -7495,15 +7522,13 @@ function crearDesgloseRow(id, monto, desc, pagado) {
   });
 
   descEl.addEventListener('input', () => {
-    const anioHoy = HOY.getFullYear();
-    const mesHoy  = HOY.getMonth() + 1;
-    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-    if (esMesPasado) return;
+    if (!mesDesgloseEditable()) return;
 
     sincronizarDesgloseCampo(id, 'desc', descEl.textContent, descEl);
     clearTimeout(saveTimers['desglose_' + id + '_desc']);
     saveTimers['desglose_' + id + '_desc'] = setTimeout(async () => {
       await guardarCampo(empresaActual, `desglose_${id}_desc`, descEl.textContent.trim());
+      espejoDesgloseMesSiguiente(id, 'desc', descEl.textContent.trim());
     }, 800);
   });
 
@@ -7512,10 +7537,7 @@ function crearDesgloseRow(id, monto, desc, pagado) {
     // en modo-historico/lector/user (ver pointer-events en el CSS);
     // esto es la capa de seguridad de datos, igual que el resto de la
     // tarjeta.
-    const anioHoy = HOY.getFullYear();
-    const mesHoy  = HOY.getMonth() + 1;
-    const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-    if (esMesPasado) return;
+    if (!mesDesgloseEditable()) return;
 
     const nuevoEstado = !div.classList.contains('is-pagado');
 
@@ -7545,6 +7567,7 @@ function crearDesgloseRow(id, monto, desc, pagado) {
           await guardarCampo(empresaActual, `desglose_${id}_vend`, eleccion);
           await guardarCampo(empresaActual, `desglose_${id}_abono`, formatMXN(montoNum));
         }
+        espejoDesgloseMesSiguiente(id, 'quitar'); // en la ventana: ya no es pendiente en el mes siguiente
         return;
       }
       // De Pagado a Pendiente: si se había sumado a un vendedor, se resta.
@@ -7568,10 +7591,86 @@ function crearDesgloseRow(id, monto, desc, pagado) {
     aplicarEstadoPagadoDesglose(id, nuevoEstado);
     sincronizarCamposDesdeDesglose(); // Cobrado/Por cobrar se mueven de inmediato
     await guardarCampo(empresaActual, `desglose_${id}_pagado`, nuevoEstado ? 'true' : 'false');
+    if (nuevoEstado) espejoDesgloseMesSiguiente(id, 'quitar'); // en la ventana: ya no es pendiente en el mes siguiente
   });
 
   div.querySelector('.desglose-remove').addEventListener('click', () => quitarDesgloseRow(id));
   return div;
+}
+
+
+// ── Ventana de cierre: que el mes siguiente siga al mes anterior ──
+// Al abrir el mes nuevo, los pendientes del mes anterior se copian
+// (propagarDesglosePendientes). Si durante la ventana de 5 días se
+// cambia un pendiente en el mes anterior (se paga, se corrige o se
+// quita), esa copia ya no reflejaría la realidad: aquí el mismo cambio
+// se aplica a la copia del mes siguiente — solo mientras allá siga
+// pendiente (si ya se pagó allá, no se toca) — y se recalculan sus
+// Meta/Cobrado/Por cobrar guardados. Fuera de la ventana no hace nada.
+// accion: 'quitar' (se pagó o se eliminó) | 'monto' | 'desc'.
+async function espejoDesgloseMesSiguiente(id, accion, valor) {
+  if (!esMesAnteriorAbierto(periodoAnio, periodoMes)) return;
+  const empresa = empresaActual;
+  const anio2 = HOY.getFullYear(), mes2 = HOY.getMonth() + 1;
+  const enc = encodeURIComponent;
+  const base = `/rest/v1/balance_diario?empresa_id=eq.${enc(empresa)}&anio=eq.${anio2}&mes=eq.${mes2}`;
+  const UPSERT = '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo';
+  try {
+    const filas = await sbRequest('GET', `${base}&select=campo,valor&campo=in.(desglose_ids,desglose_${id}_pagado)`);
+    const m = {};
+    (filas || []).forEach(r => { m[r.campo] = r.valor; });
+    let ids = [];
+    try { ids = JSON.parse(m['desglose_ids'] || '[]'); } catch (e) { ids = []; }
+    if (!ids.includes(id)) return;                      // ese pendiente no se copió al mes siguiente
+    if (m[`desglose_${id}_pagado`] === 'true') return;  // allá ya está pagado: no se toca
+    const ahora = new Date().toISOString();
+    if (accion === 'quitar') {
+      await sbRequest('POST', UPSERT, [{ empresa_id: empresa, anio: anio2, mes: mes2, campo: 'desglose_ids', valor: JSON.stringify(ids.filter(x => x !== id)), actualizado_en: ahora }]);
+      for (const suf of ['monto', 'desc', 'pagado', 'vend', 'abono']) {
+        await sbRequest('DELETE', `${base}&campo=eq.${enc('desglose_' + id + '_' + suf)}`);
+      }
+    } else if (accion === 'monto' || accion === 'desc') {
+      const campo = `desglose_${id}_${accion}`;
+      if (valor === '' || valor == null) await sbRequest('DELETE', `${base}&campo=eq.${enc(campo)}`);
+      else await sbRequest('POST', UPSERT, [{ empresa_id: empresa, anio: anio2, mes: mes2, campo, valor, actualizado_en: ahora }]);
+    } else return;
+    await recalcularDerivadosMesDB(empresa, anio2, mes2);
+  } catch (e) { console.error('espejoDesgloseMesSiguiente:', e); }
+}
+
+// Recalcula y guarda Meta / Cobrado / Por cobrar de un mes que NO se está
+// viendo en pantalla, con las mismas reglas de sincronizarCamposDesdeDesglose
+// (en NMH: Cobrado de vendedores aparte, Meta = Cobrado + Por cobrar).
+async function recalcularDerivadosMesDB(empresa, anio, mes) {
+  if (empresa === 'grupo_idirin') return;
+  const enc = encodeURIComponent;
+  const base = `/rest/v1/balance_diario?empresa_id=eq.${enc(empresa)}&anio=eq.${anio}&mes=eq.${mes}`;
+  const filas = await sbRequest('GET', `${base}&select=campo,valor`);
+  const m = {};
+  (filas || []).forEach(r => { m[r.campo] = r.valor; });
+  let ids = [];
+  try { ids = JSON.parse(m['desglose_ids'] || '[]'); } catch (e) { ids = []; }
+  let total = 0, pagado = 0;
+  ids.forEach(id => {
+    const x = parseMXN(m[`desglose_${id}_monto`] || '$0');
+    total += x;
+    if (m[`desglose_${id}_pagado`] === 'true') pagado += x;
+  });
+  const pendiente = total - pagado;
+  let valores;
+  if (empresa === 'warehouse_rentals') {
+    let cobradoVend = 0;
+    WH_VENDEDORES.forEach(v => { cobradoVend += parseMXN(m['wh_vend_' + v.key] || '$0'); });
+    valores = { meta: cobradoVend + pendiente, por_cobrar: pendiente };
+  } else {
+    valores = { meta: total, cobrado: pagado, por_cobrar: pendiente };
+  }
+  const ahora = new Date().toISOString();
+  for (const campo of Object.keys(valores)) {
+    // Igual que guardarCampo: un valor en $0 borra la fila.
+    if (Math.abs(valores[campo]) < 0.005) await sbRequest('DELETE', `${base}&campo=eq.${enc(campo)}`);
+    else await sbRequest('POST', '/rest/v1/balance_diario?on_conflict=empresa_id,anio,mes,campo', [{ empresa_id: empresa, anio, mes, campo, valor: formatMXN(valores[campo]), actualizado_en: ahora }]);
+  }
 }
 
 // Marca/desmarca "Pagado" en TODAS las copias de una fila (Flujo y Ventas).
@@ -7803,8 +7902,7 @@ function sincronizarCamposDesdeDesglose() {
   // estos campos directo de la base) SOLO si es el mes real en curso,
   // el rol puede escribir, y el valor cambió — así ver un mes pasado o
   // futuro nunca escribe nada. Con pausa, para no guardar en cada tecla.
-  const esMesReal = periodoAnio === HOY.getFullYear() && periodoMes === (HOY.getMonth() + 1);
-  if (!esMesReal || !puedeEscribirBalance()) return;
+  if (!mesPermiteEscrituraAuto() || !puedeEscribirBalance()) return;
   const empresa = empresaActual, anio = periodoAnio, mes = periodoMes;
   clearTimeout(saveTimers['derivados_desglose']);
   saveTimers['derivados_desglose'] = setTimeout(async () => {
@@ -7842,10 +7940,7 @@ function toggleDesglose(sufijo) {
 async function agregarDesgloseRow() {
   // BLOQUEO ESTRUCTURAL para meses pasados — mismo criterio que
   // agregarImprevistoRow()/agregarTraspasoRow().
-  const anioHoy = HOY.getFullYear();
-  const mesHoy  = HOY.getMonth() + 1;
-  const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-  if (esMesPasado) return;
+  if (!mesDesgloseEditable()) return;
 
   const id = 'dg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   desgloseIds.push(id);
@@ -7880,10 +7975,7 @@ async function agregarDesgloseRow() {
 
 async function quitarDesgloseRow(id) {
   // Mismo bloqueo estructural que agregarDesgloseRow().
-  const anioHoy = HOY.getFullYear();
-  const mesHoy  = HOY.getMonth() + 1;
-  const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
-  if (esMesPasado) return;
+  if (!mesDesgloseEditable()) return;
 
   document.querySelectorAll(`.desglose-row[data-desglose-id="${id}"]`).forEach(el => el.remove());
   desgloseIds = desgloseIds.filter(x => x !== id);
@@ -7904,6 +7996,7 @@ async function quitarDesgloseRow(id) {
       await sbRequest('DELETE', `/rest/v1/balance_diario?empresa_id=eq.${encodeURIComponent(empresaActual)}&anio=eq.${periodoAnio}&mes=eq.${periodoMes}&campo=eq.${encodeURIComponent('desglose_'+id+'_'+sufijo)}`);
     }
   } catch(e) { console.error('quitarDesgloseRow cleanup:', e); }
+  espejoDesgloseMesSiguiente(id, 'quitar'); // en la ventana: también se quita del mes siguiente
 }
 
 
@@ -8801,6 +8894,10 @@ async function cambiarEmpresa(empresa_id) {
     // Restaurar modo según rol si es el mes actual
     if (sesionUsuario) aplicarRol(sesionUsuario.rol);
   }
+  // Mes anterior dentro de su ventana de 5 días: sigue en modo-historico
+  // (todo cerrado) salvo el Desglose y, en NMH, el Cobrado por vendedor —
+  // el CSS y actualizarEditabilidadGlobal() leen esta clase.
+  document.body.classList.toggle('ventana-mes-anterior', esMesPasado && esMesAnteriorAbierto(periodoAnio, periodoMes));
 
   // Mostrar/ocultar tabs exclusivos según la empresa. Esto va FUERA del try
   // a propósito: la visibilidad de un tab depende solo de qué empresa es,
@@ -9911,6 +10008,43 @@ const WH_VENDEDORES = [
   // solo lectura, y solo aparece en el mes donde tiene monto real.
   { key: 'evento_atp',  nombre: 'Evento ATP', iniciales: 'ATP', color: 'color-sv', historico: true },
 ];
+// ── Ventana de cierre: los primeros días del mes siguiente ──
+// El mes anterior sigue ABIERTO para cargar el Desglose (y lo que de él
+// se calcula: Meta, Cobrado, Por cobrar; en NMH también el Cobrado de
+// los vendedores) hasta el día DIAS_VENTANA_MES_ANTERIOR del mes en
+// curso, inclusive. Del día siguiente en adelante queda cerrado igual
+// que cualquier mes pasado. Todo lo demás del mes anterior (Saldos,
+// Imprevistos, Notas, etc.) se cierra el día 1, como siempre.
+const DIAS_VENTANA_MES_ANTERIOR = 5;
+
+// ¿(anio, mes) es el mes inmediato anterior al de hoy y todavía estamos
+// dentro de los primeros días del mes en curso?
+function esMesAnteriorAbierto(anio, mes) {
+  if (HOY.getDate() > DIAS_VENTANA_MES_ANTERIOR) return false;
+  const mesHoy  = HOY.getMonth() + 1;
+  const mesPrev  = mesHoy === 1 ? 12 : mesHoy - 1;
+  const anioPrev = mesHoy === 1 ? HOY.getFullYear() - 1 : HOY.getFullYear();
+  return anio === anioPrev && mes === mesPrev;
+}
+
+// ¿El mes que se está viendo es editable para el Desglose? Sí si no es
+// un mes pasado, o si es el mes anterior dentro de su ventana de 5 días.
+function mesDesgloseEditable() {
+  const anioHoy = HOY.getFullYear();
+  const mesHoy  = HOY.getMonth() + 1;
+  const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
+  return !esMesPasado || esMesAnteriorAbierto(periodoAnio, periodoMes);
+}
+
+// ¿Se pueden ESCRIBIR en la base los cálculos automáticos de este mes
+// (arrastre de pendientes/saldos, Meta/Cobrado/Por cobrar)? Solo el mes
+// real en curso o el mes anterior dentro de su ventana — nunca un mes
+// cerrado ni uno futuro (solo verlos no debe escribir nada).
+function mesPermiteEscrituraAuto() {
+  const esMesReal = periodoAnio === HOY.getFullYear() && periodoMes === (HOY.getMonth() + 1);
+  return esMesReal || esMesAnteriorAbierto(periodoAnio, periodoMes);
+}
+
 // ¿Este vendedor cuenta como histórico en el mes que se está viendo?
 // Sí si siempre lo fue (historico: true), o si ya llegó su fecha de baja
 // (baja: { anio, mes }, ej. Fernando C desde octubre 2026). Antes de esa
@@ -11122,6 +11256,11 @@ function renderWHVendedores(datos) {
   const mesHoy  = HOY.getMonth() + 1;
   const esMesPasado = periodoAnio < anioHoy || (periodoAnio === anioHoy && periodoMes < mesHoy);
 
+  // Un mes pasado cuenta como "cerrado" aquí salvo que sea el mes
+  // anterior dentro de su ventana de 5 días (ahí el Cobrado por vendedor
+  // sigue capturable, igual que el mes actual).
+  const mesCerrado = esMesPasado && !esMesAnteriorAbierto(periodoAnio, periodoMes);
+
   // Calcular total para las barras proporcionales — incluye a TODOS
   // (activos + históricos) para que la suma del mes sea correcta,
   // aunque algún vendedor sin monto no se dibuje como tarjeta abajo.
@@ -11147,7 +11286,7 @@ function renderWHVendedores(datos) {
     //  - Mes PASADO: cualquiera (activo o histórico) sin monto registrado
     //    se oculta — es un mes cerrado, no hace falta una tarjeta para
     //    "capturar" nada ahí.
-    const debeOcultarse = esMesPasado ? (num === 0) : (vendedorEsHistorico(v) && num === 0);
+    const debeOcultarse = mesCerrado ? (num === 0) : (vendedorEsHistorico(v) && num === 0);
     if (debeOcultarse) return;
 
     const pct = total > 0 ? Math.min(Math.round(num / total * 100), 100) : 0;
@@ -11161,7 +11300,7 @@ function renderWHVendedores(datos) {
     // se está en Balance de Ventas (el apartado "Vendedores" de NMH
     // Baja Sur es de solo lectura ahí para todos, sin excepción — se
     // edita únicamente desde Balance de Flujo).
-    const soloLectura = vendedorEsHistorico(v) || esMesPasado || modoVentas;
+    const soloLectura = vendedorEsHistorico(v) || mesCerrado || modoVentas;
     const montoHTML = soloLectura
       ? `<div class="wh-v-monto" style="cursor:default">${escapeHTML(val)}</div>`
       : `<div class="wh-v-monto" contenteditable="true" data-field="${campo}" data-wh-vend="${v.key}">${escapeHTML(val)}</div>`;
