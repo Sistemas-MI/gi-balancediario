@@ -4543,6 +4543,104 @@
     pointer-events: none !important;
     cursor: default !important;
   }
+
+  /* ── Aviso temporal: el mes anterior sigue abierto (primeros 5 días) ──
+     Tarjeta discreta, translúcida, abajo a la derecha (por encima del
+     indicador de guardado). Se retira sola, se pausa al pasar el mouse.
+     Mismas tipografías y colores del sistema (EB Garamond / Inter,
+     café y dorado). */
+  .aviso-ventana {
+    position: fixed;
+    right: 20px;
+    bottom: 64px;
+    z-index: 900;
+    width: min(330px, calc(100vw - 32px));
+    padding: 14px 16px 13px;
+    background: rgba(255,255,255,.88);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid rgba(184,149,74,.38);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(92,46,26,.14), inset 0 1px 0 rgba(255,255,255,.7);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(14px) scale(.98);
+    transition: opacity .45s ease, transform .55s cubic-bezier(.2,.9,.3,1.1);
+  }
+  .aviso-ventana.visible { opacity: 1; transform: translateY(0) scale(1); }
+  .aviso-ventana.saliendo { opacity: 0; transform: translateY(8px) scale(.99); transition-duration: .3s; }
+  .aviso-ventana-top { display: flex; align-items: flex-start; gap: 10px; }
+  .aviso-ventana-punto {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-top: 8px;
+    border-radius: 50%;
+    background: var(--dorado);
+    animation: avisoPulso 2.4s ease-out 2;
+  }
+  @keyframes avisoPulso {
+    0%   { box-shadow: 0 0 0 0 rgba(184,149,74,.5); }
+    100% { box-shadow: 0 0 0 9px rgba(184,149,74,0); }
+  }
+  .aviso-ventana-cuerpo { flex: 1; min-width: 0; }
+  .aviso-ventana-titulo {
+    font-family: 'EB Garamond', serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--cafe);
+    line-height: 1.25;
+  }
+  .aviso-ventana-texto { font-size: 11.5px; line-height: 1.45; color: var(--suave); margin-top: 2px; }
+  .aviso-ventana-cerrar {
+    flex-shrink: 0;
+    margin: -4px -6px 0 0;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    color: var(--suave);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .aviso-ventana-cerrar:hover { background: var(--cafe-xs); color: var(--cafe); }
+  .aviso-ventana-pie { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
+  .aviso-ventana-dias { display: flex; align-items: center; gap: 4px; }
+  .aviso-ventana-dias i { width: 14px; height: 3px; border-radius: 2px; background: rgba(92,46,26,.14); }
+  .aviso-ventana-dias i.pasado { background: rgba(184,149,74,.55); }
+  .aviso-ventana-dias i.hoy { background: var(--cafe); }
+  .aviso-ventana-dia-txt { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--suave); margin-left: 6px; }
+  .aviso-ventana-ir {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--cafe);
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(184,149,74,.6);
+    padding: 0;
+    cursor: pointer;
+  }
+  .aviso-ventana-ir:hover { border-bottom-color: var(--cafe); }
+  .aviso-ventana-barra {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, var(--dorado), rgba(184,149,74,.15));
+    transform-origin: left;
+    animation: avisoBarra 12s linear forwards;
+  }
+  .aviso-ventana:hover .aviso-ventana-barra { animation-play-state: paused; }
+  @keyframes avisoBarra { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  @media (max-width: 520px) { .aviso-ventana { left: 16px; right: 16px; width: auto; } }
+  @media (prefers-reduced-motion: reduce) {
+    .aviso-ventana, .aviso-ventana-punto, .aviso-ventana-barra { animation: none !important; transition: opacity .2s !important; transform: none !important; }
+  }
+  @media print { .aviso-ventana { display: none !important; } }
 </style>
 </head>
 <body>
@@ -9017,6 +9115,7 @@ async function cambiarEmpresa(empresa_id) {
     // los generados dinámicamente.
     actualizarEditabilidadGlobal();
     setTimeout(() => document.getElementById('loadingOverlay').classList.add('hidden'), 300);
+    setTimeout(mostrarAvisoVentanaMesAnterior, 1200); // recordatorio de la ventana de 5 días (solo si aplica)
   }
 }
 
@@ -10043,6 +10142,90 @@ function mesDesgloseEditable() {
 function mesPermiteEscrituraAuto() {
   const esMesReal = periodoAnio === HOY.getFullYear() && periodoMes === (HOY.getMonth() + 1);
   return esMesReal || esMesAnteriorAbierto(periodoAnio, periodoMes);
+}
+
+
+// ── Aviso temporal: el mes anterior sigue abierto (primeros 5 días) ──
+// Recordatorio discreto SOLO para quien puede editar (mismos roles que
+// ven los controles de la ventana). Sale una vez al día por navegador,
+// se retira solo a los 12 s (se pausa con el mouse encima) y se puede
+// cerrar. Nunca estorba: no bloquea nada ni pide ninguna acción.
+function mostrarAvisoVentanaMesAnterior() {
+  try {
+    if (typeof sesionUsuario === 'undefined' || !sesionUsuario) return;
+    if (empresaActual === 'grupo_idirin') return;                       // en Grupo solo se consulta
+    if (HOY.getDate() > DIAS_VENTANA_MES_ANTERIOR) return;               // fuera de la ventana
+    if (!puedeEscribirBalance() || document.body.classList.contains('modo-patricio')) return;
+    if (document.getElementById('avisoVentana')) return;
+
+    const clave = `bd_aviso_ventana_${HOY.getFullYear()}-${HOY.getMonth() + 1}-${HOY.getDate()}`;
+    try { if (localStorage.getItem(clave)) return; } catch (e) { /* sin almacenamiento: se muestra igual */ }
+    try { localStorage.setItem(clave, '1'); } catch (e) { /* idem */ }
+
+    const dia      = HOY.getDate();
+    const mesHoy   = HOY.getMonth() + 1;
+    const mesPrev  = mesHoy === 1 ? 12 : mesHoy - 1;
+    const anioPrev = mesHoy === 1 ? HOY.getFullYear() - 1 : HOY.getFullYear();
+    const nPrev    = MESES_NOMBRES[mesPrev - 1];
+    const nHoy     = MESES_NOMBRES[mesHoy - 1].toLowerCase();
+    const ultimo   = dia === DIAS_VENTANA_MES_ANTERIOR;
+    const esNMH    = empresaActual === 'warehouse_rentals';
+    const que      = esNMH ? 'el Desglose y el Cobrado por vendedor' : 'el Desglose';
+    const queDel   = esNMH ? 'del Desglose y del Cobrado por vendedor' : 'del Desglose';
+    const titulo   = ultimo ? `Último día para ${nPrev.toLowerCase()}` : `${nPrev} sigue abierto`;
+    const texto    = ultimo
+      ? `Hoy cierra la carga ${queDel} de ${nPrev.toLowerCase()}.`
+      : `Puedes cargar ${que} de ${nPrev.toLowerCase()} hasta el ${DIAS_VENTANA_MES_ANTERIOR} de ${nHoy}.`;
+
+    let dias = '';
+    for (let i = 1; i <= DIAS_VENTANA_MES_ANTERIOR; i++) dias += `<i class="${i < dia ? 'pasado' : (i === dia ? 'hoy' : '')}"></i>`;
+
+    // "Ir a <mes>" solo si el selector de mes existe y todavía no estás en ese mes.
+    const valPrev = `${anioPrev}-${mesPrev}`;
+    const mesSel  = document.getElementById('mesSelect');
+    const puedeIr = !!mesSel && [...mesSel.options].some(o => o.value === valPrev) && mesSel.value !== valPrev;
+
+    const el = document.createElement('div');
+    el.id = 'avisoVentana';
+    el.className = 'aviso-ventana';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = `
+      <div class="aviso-ventana-top">
+        <span class="aviso-ventana-punto"></span>
+        <div class="aviso-ventana-cuerpo">
+          <div class="aviso-ventana-titulo">${escapeHTML(titulo)}</div>
+          <div class="aviso-ventana-texto">${escapeHTML(texto)}</div>
+        </div>
+        <button type="button" class="aviso-ventana-cerrar" aria-label="Cerrar aviso">×</button>
+      </div>
+      <div class="aviso-ventana-pie">
+        <div class="aviso-ventana-dias">${dias}<span class="aviso-ventana-dia-txt">Día ${dia} de ${DIAS_VENTANA_MES_ANTERIOR}</span></div>
+        ${puedeIr ? `<button type="button" class="aviso-ventana-ir">Ir a ${escapeHTML(nPrev.toLowerCase())}</button>` : ''}
+      </div>
+      <div class="aviso-ventana-barra"></div>`;
+    document.body.appendChild(el);
+
+    let timer = null, restante = 12000, t0 = 0;
+    const cerrar = () => {
+      clearTimeout(timer);
+      el.classList.remove('visible');
+      el.classList.add('saliendo');
+      setTimeout(() => el.remove(), 350);
+    };
+    const armar = () => { t0 = Date.now(); timer = setTimeout(cerrar, restante); };
+    el.addEventListener('mouseenter', () => { clearTimeout(timer); restante -= (Date.now() - t0); });
+    el.addEventListener('mouseleave', () => { if (restante > 0) armar(); });
+    el.querySelector('.aviso-ventana-cerrar').addEventListener('click', cerrar);
+    const ir = el.querySelector('.aviso-ventana-ir');
+    if (ir) ir.addEventListener('click', () => {
+      mesSel.value = valPrev;
+      mesSel.dispatchEvent(new Event('change'));   // mismo camino que cambiar el mes a mano
+      cerrar();
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('visible')));
+    armar();
+  } catch (e) { console.warn('mostrarAvisoVentanaMesAnterior:', e); }
 }
 
 // ¿Este vendedor cuenta como histórico en el mes que se está viendo?
