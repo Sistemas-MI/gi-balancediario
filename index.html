@@ -11922,30 +11922,26 @@ function renderWHPresupuesto() {
 
   // ── Tarjeta 2 "Faltante (presupuesto)": mismo diseño de fila, pero
   // mostrando el faltante en pesos en vez del %. ──
-  // CORRECCIÓN (mismo bug que ya se corrigió en "Faltante por
-  // vendedores"/renderWHPorConseguir, validado con datos reales): antes
-  // cada vendedor se comparaba solo contra su cuarta parte del
-  // presupuesto, topando su faltante en $0 si la superaba — ese
-  // excedente nunca compensaba a los demás, así que la SUMA de los 4
-  // faltantes por separado terminaba siendo mucho más grande que lo
-  // que en realidad le falta a la empresa para su presupuesto (ej.
-  // mostraba $2,269,541.65 cuando en realidad solo faltaban
-  // $1,480,542.32, con la empresa ya al 61.4% de su presupuesto).
-  //
-  // Ahora el total SIEMPRE es el faltante real (Presupuesto − lo que ya
-  // cobraron entre todos, nunca negativo), repartido entre los
-  // vendedores por debajo de su cuota de forma proporcional a qué tan
-  // atrás va cada quien — la suma de las 4 filas coincide siempre, en
-  // pesos exactos, con el total de arriba.
+  // Se calcula igual que "Faltante por vendedores" (validado con datos reales):
+  //  - TOTAL = Presupuesto − Total cobrado de la empresa (nunca negativo).
+  //    Es el faltante real: si la empresa ya alcanzó el presupuesto, es $0.
+  //  - CADA FILA = la parte de ese vendedor (Presupuesto ÷ vendedores
+  //    activos) menos lo que YA cobró, mínimo $0. Solo lleva ✓ quien ya
+  //    cubrió SU parte; quien no, muestra lo que le falta aunque el total
+  //    de la empresa ya esté en $0 (ej. Jaqueline V al 89% de su parte
+  //    con la empresa al 120% del presupuesto). Por eso las filas pueden
+  //    sumar distinto que el total: quien rebasó su parte ya cubrió parte
+  //    del presupuesto de la empresa.
+  // (Antes el total se repartía proporcionalmente entre las filas; con el
+  // total en $0 eso dejaba a TODOS en ✓ aunque alguien fuera al 89%.)
   if (faltaCard) {
     const faltaLista = document.getElementById('whPresupuestoFaltaLista');
-    const faltantePresupuestoReal = Math.max(0, presupuestoTotal - totalCobradoActivos);
-    const crudoPresupuestoDe = activos.map(v => ({ v, crudo: Math.max(0, porVendedor - cobradoDe(v.key)) }));
-    const sumaCrudaPresupuesto = crudoPresupuestoDe.reduce((s, x) => s + x.crudo, 0);
+    // Mismo "Total cobrado" que se ve en esta pestaña (todos los vendedores con monto).
+    const faltantePresupuestoReal = Math.max(0, presupuestoTotal - calcularTotalVendedoresWH());
 
-    const filasHTML = crudoPresupuestoDe.map(({ v, crudo }) => {
+    const filasHTML = activos.map(v => {
       const cobrado = cobradoDe(v.key);
-      const falta   = sumaCrudaPresupuesto > 0 ? faltantePresupuestoReal * (crudo / sumaCrudaPresupuesto) : 0;
+      const falta   = Math.max(0, porVendedor - cobrado); // su parte − lo que ya cobró
       const pct = porVendedor > 0 ? Math.min(Math.round(cobrado / porVendedor * 100), 100) : 0;
       const anchoBarra = Math.max(Math.min(pct, 100), 0);
       const cumplido = falta <= 0;
